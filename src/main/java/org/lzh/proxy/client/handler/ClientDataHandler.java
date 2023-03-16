@@ -29,7 +29,6 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
         Channel channel = ctx.channel();
         if (isRegister) {
             log.warn("服务端连接端口 {} 断连，重连中！", GlobalConfig.getInstance().getRegisterPort());
-            // Client.timer.newTimeout(this,5, TimeUnit.SECONDS);
             Client.registerConnect(proxyInfo);
         }else {
             Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
