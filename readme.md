@@ -40,7 +40,7 @@
     # 客户端代理服务列表
     proxyInfos:
       - ip: 127.0.0.1
-        port: 7001
+        port: 7002
         remotePort: 7001
     ```
     - 2.2 启动客户端：
