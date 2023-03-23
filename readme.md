@@ -6,6 +6,46 @@
   - 1.1修改配置文件 application.yml
 
     如果是服务端请设置isServer为true，客户端设为false，服务端配置好自己的registerIp以及registerPort，其他留空就好
+    ``` yaml
+    isServer: true
+    # 注册ip以及端口
+    registerIp: 127.0.0.1
+    registerPort: 7000
+    # 需要打开的服务端口列表
+    serverInfos:
+      - ip: 127.0.0.1
+        port: 7001
+    # 客户端代理服务列表
+    proxyInfos:
+      - ip: 127.0.0.1
+        port: 7001
+        remotePort: 7001
     ```
-    kjlasjf
+    - 2.启动服务端：
+    ``` sh
+    java -jar lzh-proxy.jar
     ```
+- 2.客户端配置
+  - 2.1 修改配置文件application.yml
+  设置isServer配置为false，配置好服务端监听的registerIp以及registerPort，同时将poxyInfos配置列表新增需要代理的应用服务器的ip、port，设置需要在服务端打开监听的remotePort端口
+  ``` yaml
+    isServer: false
+    # 服务端注册ip以及port
+    registerIp: 127.0.0.1
+    registerPort: 7000
+    # 客户端无需关心
+    serverInfos:
+      - ip: 127.0.0.1
+        port: 7001
+    # 客户端代理服务列表
+    proxyInfos:
+      - ip: 127.0.0.1
+        port: 7001
+        remotePort: 7001
+    ```
+    - 2.启动客户端：
+    ``` sh
+    java -jar lzh-proxy.jar
+    ```
+    启动完成后客户端会像服务端注册对应连接以及打开服务端相应端口，并完成通信链路建立
+    
