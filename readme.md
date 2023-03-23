@@ -11,11 +11,11 @@
     # 注册ip以及端口
     registerIp: 127.0.0.1
     registerPort: 7000
-    # 需要打开的服务端口列表
+    # 需要预打开的服务端口列表
     serverInfos:
       - ip: 127.0.0.1
         port: 7001
-    # 客户端代理服务列表
+    # 服务端无需关心
     proxyInfos:
       - ip: 127.0.0.1
         port: 7001
