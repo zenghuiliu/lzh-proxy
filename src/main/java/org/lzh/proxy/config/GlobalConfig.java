@@ -81,8 +81,10 @@ public class GlobalConfig {
 
     @Data
     public static class ServerInfo {
+        private String type;
         private String ip;
         private Integer port;
+        private SSHInfo ssh;
     }
     @Data
     public static class ProxyInfo {
@@ -92,6 +94,16 @@ public class GlobalConfig {
         private Channel channel = null;
         private Channel register = null;
         private Integer status;
+    }
+
+    @Data
+    public static class SSHInfo {
+        private String ip;
+        private Integer port;
+        private String username;
+        private String password;
+        private String forwardIp;
+        private Integer forwardPort;
     }
 
 }

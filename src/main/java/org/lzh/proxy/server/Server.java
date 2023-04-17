@@ -2,10 +2,14 @@ package org.lzh.proxy.server;
 
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
 import org.lzh.proxy.Main;
 import org.lzh.proxy.config.ChannelChache;
 import org.lzh.proxy.config.GlobalConfig;
+import org.lzh.proxy.config.GlobalConfig.SSHInfo;
+import org.lzh.proxy.config.GlobalConfig.ServerInfo;
 import org.lzh.proxy.server.handler.ServerDataHandler;
+import org.lzh.proxy.server.ssh.SSHClient;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -37,8 +41,22 @@ public class Server {
         List<GlobalConfig.ServerInfo> serverInfos = GlobalConfig.getInstance().getServerInfos();
         if (serverInfos != null) {
             for (GlobalConfig.ServerInfo serverInfo : GlobalConfig.getInstance().getServerInfos()) {
-                bindPort(serverInfo);
+                if(StringUtils.isBlank(serverInfo.getType()) || serverInfo.getType().equalsIgnoreCase("tcp")){
+                    bindPort(serverInfo);
+                }else if(serverInfo.getType().equalsIgnoreCase("ssh")){
+                    sshForward(serverInfo);
+                }
             }
+        }
+    }
+
+    private void sshForward(ServerInfo serverInfo) {
+        try {
+            SSHInfo sshInfo = serverInfo.getSsh();
+            SSHClient.forwardLocal(SSHClient.connectSession(sshInfo.getIp(), sshInfo.getPort(), sshInfo.getUsername(), sshInfo.getPassword())
+            ,serverInfo.getPort(), sshInfo.getForwardIp(), sshInfo.getForwardPort());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

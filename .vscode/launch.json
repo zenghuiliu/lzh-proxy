@@ -18,7 +18,7 @@
             "request": "launch",
             "args": "-log.level=debug",
             "mainClass": "org.lzh.proxy.Main",
-            "projectName": "lzh-proxy" 
+            "projectName": "lzh-proxy"
         }
     ]
 }
