@@ -1,4 +1,5 @@
 {
+    "workbench.colorTheme": "IntelliJ Dark",
     "java.dependency.packagePresentation": "hierarchical",
     "java.configuration.updateBuildConfiguration": "interactive"
 }

@@ -2,7 +2,7 @@ isServer: true
 # 注册ip以及端口
 registerIp: 127.0.0.1
 registerPort: 7000
-# 暴露端口列表
+# 服务端暴露端口列表
 serverInfos:
   # 服务类型：tcp（默认打开tcp端口）、ssh（ssh登录转发）
   - type: ssh
@@ -19,7 +19,7 @@ serverInfos:
       forwardIp: 127.0.0.1
       forwardPort: 6379
 
-# 代理端口
+# 代理端口（isServer为true无需配置）
 proxyInfos:
   - ip: 127.0.0.1
     port: 28080
