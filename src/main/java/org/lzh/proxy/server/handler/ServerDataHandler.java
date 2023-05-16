@@ -58,7 +58,10 @@ public class ServerDataHandler extends SimpleChannelInboundHandler<ByteBuf> {
         int port = socketAddress.getPort();
         Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
         Channel proxyChannel = ChannelChache.proxyToReqMap.get(port);
-        if (proxyChannel != null && proxyChannel.isOpen()){
+        if(proxyChannel == null){
+            return;
+        }
+        if (proxyChannel.isOpen()){
             ProxyMessage proxyMessage = new ProxyMessage();
             proxyMessage.setType(type);
             proxyMessage.setSerial(serial.get());

@@ -8,6 +8,7 @@ import org.lzh.proxy.protocol.ProxyMessage;
 
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -46,6 +47,12 @@ public class RegisterDataHandler extends SimpleChannelInboundHandler<ProxyMessag
                     proxyInfo.setIp(info[0]);
                     proxyInfo.setPort(Integer.valueOf(info[1].trim()));
                     proxyInfo.setRemotePort(reqPort);
+                    Channel oldChannel = ChannelChache.proxyToReqMap.get(reqPort);
+                    if(oldChannel != null && oldChannel.isOpen()){
+                        log.info("请求端口已打开：{}，正在关闭……", reqPort);
+                        oldChannel.close().sync();
+                        ChannelChache.proxyToReqMap.remove(reqPort);
+                    }
                     ChannelChache.proxyToReqMap.put(reqPort,reqChannel);
                     Channel serverChannel = ChannelChache.portToServerMap.get(reqPort);
                     if(serverChannel == null || !serverChannel.isOpen()){
@@ -56,13 +63,6 @@ public class RegisterDataHandler extends SimpleChannelInboundHandler<ProxyMessag
                     }
                     log.info("被代理端口已连接到 {}", reqPort);
                 }
-                /*for (GlobalConfig.ServerInfo serverInfo : GlobalConfig.getInstance().getServerInfos()) {
-                    if (reqPort.equals(serverInfo.getPort())) {
-                        log.info("被代理端口已连接到 {}", reqPort);
-                        reqChannel.pipeline().remove("line");
-                        reqChannel.pipeline().remove("string");
-                    }
-                }*/
             }
         }else if (msg.getType() == Constants.TYPE_DISCONNECT){
             Channel sndChannel = ChannelChache.serverChannelMap.get(msg.getSerial());
