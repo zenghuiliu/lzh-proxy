@@ -83,7 +83,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>org.bxsty.proxy.Main</mainClass>
+                            <mainClass>org.lzh.proxy.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
