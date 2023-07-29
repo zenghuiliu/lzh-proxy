@@ -1,0 +1,150 @@
+{
+    "java.compile.nullAnalysis.mode": "automatic",
+    "workbench.colorTheme": "IntelliJ Dark",
+    "redhat.telemetry.enabled": true,
+    "rsp-ui.enableStartServerOnActivation": [
+        {
+            "id": "redhat.vscode-community-server-connector",
+            "name": "Community Server Connector",
+            "startOnActivation": true
+        }
+    ],
+    "netbeans.javaSupport.enabled": false,
+    "netbeans.jdkhome": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-1.8",
+            "path": "D:\\java_software\\jdk\\openjdk-1.8.0.372"
+        },
+        {
+            "name": "JavaSE-11",
+            "path": "D:\\java_software\\jdk\\openjdk-11.0.19.7"
+        },
+        {
+            "name": "JavaSE-17",
+            "path": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2",
+            "default": true
+        },
+        {
+            "name": "JavaSE-20",
+            "path": "c:\\Users\\Administrator\\AppData\\Roaming\\Code\\User\\globalStorage\\pleiades.java-extension-pack-jdk\\java\\20"
+        }
+    ],
+    "java.debug.settings.hotCodeReplace": "auto",
+    "workbench.tree.indent": 20,
+    "files.eol": "\n",
+    "[bat]": {
+        "files.eol": "\r\n"
+    },
+    "java.jdt.ls.java.home": "D:\\java_software\\jdk\\openjdk-17.0.7.0.7",
+    "spring-boot.ls.java.home": "D:\\java_software\\jdk\\openjdk-17.0.7.0.7",
+    "rsp-ui.rsp.java.home": "D:\\java_software\\jdk\\openjdk-17.0.7.0.7",
+    "java.import.gradle.java.home": "D:\\java_software\\jdk\\openjdk-17.0.7.0.7",
+    "maven.terminal.customEnv": [
+        {
+            "environmentVariable": "JAVA_HOME",
+            "value": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2"
+        }
+    ],
+    "terminal.integrated.env.windows": {
+        "JAVA_HOME": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2",
+        "PATH": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2\\bin;D:\\java_software\\jdk\\openjdk-17.0.7.0.7\\bin;${env:PATH}",
+        "GRAALVM_HOME": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2"
+    },
+    "terminal.integrated.defaultProfile.windows": "Command Prompt",
+    "terminal.integrated.profiles.windows": {
+        "PowerShell": {
+            "source": "PowerShell",
+            "icon": "terminal-powershell"
+        },
+        "Command Prompt": {
+            "path": [
+                "${env:windir}\\Sysnative\\cmd.exe",
+                "${env:windir}\\System32\\cmd.exe"
+            ],
+            "args": [],
+            "icon": "terminal-cmd"
+        },
+        "Git Bash": {
+            "source": "Git Bash"
+        },
+        "JavaSE-1.8": {
+            "overrideName": true,
+            "path": "cmd",
+            "env": {
+                "JAVA_HOME": "D:\\java_software\\jdk\\openjdk-1.8.0.372",
+                "PATH": "D:\\java_software\\jdk\\openjdk-1.8.0.372\\bin;${env:PATH}"
+            }
+        },
+        "JavaSE-11": {
+            "overrideName": true,
+            "path": "cmd",
+            "env": {
+                "JAVA_HOME": "D:\\java_software\\jdk\\openjdk-11.0.19.7",
+                "PATH": "D:\\java_software\\jdk\\openjdk-11.0.19.7\\bin;${env:PATH}"
+            }
+        },
+        "JavaSE-17": {
+            "overrideName": true,
+            "path": "cmd",
+            "env": {
+                "JAVA_HOME": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2",
+                "PATH": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2\\bin;${env:PATH}"
+            }
+        },
+        "JavaSE-20": {
+            "overrideName": true,
+            "path": "cmd",
+            "env": {
+                "JAVA_HOME": "c:\\Users\\Administrator\\AppData\\Roaming\\Code\\User\\globalStorage\\pleiades.java-extension-pack-jdk\\java\\20",
+                "PATH": "c:\\Users\\Administrator\\AppData\\Roaming\\Code\\User\\globalStorage\\pleiades.java-extension-pack-jdk\\java\\20\\bin;${env:PATH}"
+            }
+        }
+    },
+    "boot-java.rewrite.reconcile": true,
+    "graalvm.home": "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2",
+    "graalvm.installations": [
+        "",
+        "d:\\java_software\\jdk\\graalvm-ee-java17-22.3.2"
+    ],
+    "[xml]": {
+        "editor.defaultFormatter": "redhat.vscode-xml"
+    },
+    "window.openFoldersInNewWindow": "on",
+    "window.restoreWindows": "none",
+    "cmake.configureOnOpen": true,
+    "cmake.additionalCompilerSearchDirs": [
+        "C:/msys64/mingw32/bin",
+        "C:/msys64/mingw64/bin",
+        "C:/msys64/clang32/bin",
+        "C:/msys64/clang64/bin",
+        "C:/msys64/clangarm64/bin",
+        "C:/msys64/ucrt64/bin"
+    ],
+    "workbench.iconTheme": "vscode-icons",
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "[vue]": {
+        "editor.defaultFormatter": "Vue.volar"
+    },
+    "trailing-spaces.includeEmptyLines": false,
+    "cSpell.diagnosticLevel": "Hint",
+    "editor.rulers": [
+        {
+            "column": 80,
+            "color": "#00FF0015"
+        },
+        {
+            "column": 100,
+            "color": "#FFFF0010"
+        },
+        {
+            "column": 120,
+            "color": "#FF000025"
+        }
+    ],
+    "[java]": {
+        "editor.defaultFormatter": "redhat.java"
+    },
+    "java.configuration.updateBuildConfiguration": "automatic"
+}
