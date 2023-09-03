@@ -2,25 +2,24 @@ isServer: true
 # 注册ip以及端口
 registerIp: 127.0.0.1
 registerPort: 7000
+# ssh连接信息
+sshInfos:
+  - id: test
+    # ssh登录信息
+    ip: 127.0.0.1
+    port: 22
+    username: root
+    password: root
+
 # 服务端暴露端口列表
 serverInfos:
   # 服务类型：tcp（默认打开tcp端口）、ssh（ssh登录转发）
   - type: ssh
     ip: 127.0.0.1
-    port: 2222
+    port: 8848
     # 类型为ssh时需要配置以下内容
-    ssh: 
-      # ssh登录信息
-      ip: 127.0.0.1
-      port: 22
-      username: root
-      password: root
-      # ssh转发ip以及port
-      forwardIp: 127.0.0.1
-      forwardPort: 6379
+    sshId: test
+    # 转发ip以及port
+    forwardIp: 127.0.0.1
+    forwardPort: 8848
 
-# 代理端口（isServer为true无需配置）
-proxyInfos:
-  - ip: 127.0.0.1
-    port: 28080
-    remotePort: 7001

@@ -2,10 +2,6 @@
   # 服务端注册ip以及port
   registerIp: 127.0.0.1
   registerPort: 7000
-  # 客户端无需关心
-  serverInfos:
-    - ip: 127.0.0.1
-      port: 7001
   # 客户端代理服务列表
   proxyInfos:
     - ip: 127.0.0.1

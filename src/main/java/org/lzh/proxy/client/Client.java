@@ -8,6 +8,7 @@ import org.lzh.proxy.client.handler.ClientIdleDataHandler;
 import org.lzh.proxy.config.ChannelChache;
 import org.lzh.proxy.config.Constants;
 import org.lzh.proxy.config.GlobalConfig;
+import org.lzh.proxy.config.GlobalConfig.ProxyInfo;
 import org.lzh.proxy.protocol.ProxyMessage;
 import org.lzh.proxy.protocol.ProxyMessageDecoder;
 import org.lzh.proxy.protocol.ProxyMessageEncoder;
@@ -39,13 +40,13 @@ public class Client {
 
             }
         });
-        for (GlobalConfig.ProxyInfo proxyInfo : GlobalConfig.getInstance().getProxyInfos()){
+        for (ProxyInfo proxyInfo : GlobalConfig.getInstance().getProxyInfos()){
             // connect register
             registerConnect(proxyInfo);
         }
     }
 
-    public static void registerConnect(GlobalConfig.ProxyInfo proxyInfo){
+    public static void registerConnect(ProxyInfo proxyInfo){
         if (proxyInfo.getRegister() == null || !proxyInfo.getRegister().isOpen()) {
             bootstrap.connect(GlobalConfig.getInstance().getRegisterIp().trim(), GlobalConfig.getInstance().getRegisterPort()).addListener(new ChannelFutureListener() {
                 @Override
@@ -74,7 +75,7 @@ public class Client {
         }
     }
 
-    public static void proxyConnect(GlobalConfig.ProxyInfo proxyInfo,Long serial){
+    public static void proxyConnect(ProxyInfo proxyInfo,Long serial){
         if (proxyInfo.getChannel() == null || !proxyInfo.getChannel().isOpen()) {
             ChannelFuture channelFuture = bootstrap.connect(proxyInfo.getIp().trim(), proxyInfo.getPort()).addListener(new ChannelFutureListener() {
                 @Override

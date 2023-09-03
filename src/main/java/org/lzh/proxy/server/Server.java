@@ -6,13 +6,17 @@ import org.apache.commons.lang3.StringUtils;
 import org.lzh.proxy.Main;
 import org.lzh.proxy.config.ChannelChache;
 import org.lzh.proxy.config.GlobalConfig;
-import org.lzh.proxy.config.GlobalConfig.SSHInfo;
 import org.lzh.proxy.config.GlobalConfig.ServerInfo;
 import org.lzh.proxy.server.handler.ServerDataHandler;
 import org.lzh.proxy.server.ssh.SSHClient;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import lombok.extern.slf4j.Slf4j;
@@ -38,29 +42,20 @@ public class Server {
                 pipeline.addLast(new ServerDataHandler());
             }
         });
-        List<GlobalConfig.ServerInfo> serverInfos = GlobalConfig.getInstance().getServerInfos();
+        List<ServerInfo> serverInfos = GlobalConfig.getInstance().getServerInfos();
         if (serverInfos != null) {
-            for (GlobalConfig.ServerInfo serverInfo : GlobalConfig.getInstance().getServerInfos()) {
-                if(StringUtils.isBlank(serverInfo.getType()) || serverInfo.getType().equalsIgnoreCase("tcp")){
+            for (ServerInfo serverInfo : serverInfos) {
+                if (StringUtils.isBlank(serverInfo.getType()) || serverInfo.getType().equalsIgnoreCase("tcp")) {
                     bindPort(serverInfo);
-                }else if(serverInfo.getType().equalsIgnoreCase("ssh")){
-                    sshForward(serverInfo);
+                } else if (serverInfo.getType().equalsIgnoreCase("ssh")) {
+                    SSHClient.addForward(serverInfo);
                 }
             }
         }
     }
 
-    private void sshForward(ServerInfo serverInfo) {
-        try {
-            SSHInfo sshInfo = serverInfo.getSsh();
-            SSHClient.forwardLocal(SSHClient.connectSession(sshInfo.getIp(), sshInfo.getPort(), sshInfo.getUsername(), sshInfo.getPassword())
-            ,serverInfo.getPort(), sshInfo.getForwardIp(), sshInfo.getForwardPort());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
-    public void bindPort(GlobalConfig.ServerInfo serverInfo) {
+    public void bindPort(ServerInfo serverInfo) {
         serverBootstrap.bind(serverInfo.getPort()).addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
