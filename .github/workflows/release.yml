@@ -10,20 +10,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v6
+      # setup-java 只负责 JDK 与 Central 部署凭据；
+      # GPG 手动导入（避免 setup-java 把 gpg.passphrase 写入 settings.xml 引发解密报错）
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
-          # Maven Central 发布凭据（仓库 Settings -> Secrets 配置）：
-          #   CENTRAL_USERNAME / CENTRAL_PASSWORD  = central.sonatype.com 的 User Token
-          #   GPG_PRIVATE_KEY                      = 导出的私钥（armored）
-          #   GPG_PASSPHRASE                       = GPG 密钥口令
           server-id: central
-          server-username-env-var: MAVEN_USERNAME
-          server-password-env-var: MAVEN_CENTRAL_TOKEN
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase-env-var: MAVEN_GPG_PASSPHRASE
+          server-username: ${{ secrets.CENTRAL_USERNAME }}
+          server-password: ${{ secrets.CENTRAL_PASSWORD }}
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          gpg --batch --import <<< "$GPG_PRIVATE_KEY"
+          mkdir -p ~/.gnupg
+          printf "allow-loopback-pinentry\n" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
 
       - name: Build & test & integration-test
         run: mvn -B -ntp verify
@@ -40,6 +45,4 @@ jobs:
       - name: Publish to Maven Central Portal
         run: mvn -B -ntp deploy -Prelease -DskipTests
         env:
-          MAVEN_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          MAVEN_CENTRAL_TOKEN: ${{ secrets.CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
