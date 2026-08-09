@@ -10,16 +10,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # setup-java 只负责 JDK 与 Central 部署凭据；
-      # GPG 手动导入（避免 setup-java 把 gpg.passphrase 写入 settings.xml 引发解密报错）
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
-          server-id: central
-          server-username: ${{ secrets.CENTRAL_USERNAME }}
-          server-password: ${{ secrets.CENTRAL_PASSWORD }}
+
+      # 手动写入 Maven Central 凭据（setup-java 可能写成 ${env.XXX} 引用，
+      # 而插件解析不到环境变量导致 401；直接写死值最可靠）
+      - name: Configure Maven Central credentials
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings>
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${CENTRAL_USERNAME}</username>
+                <password>${CENTRAL_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
 
       - name: Import GPG key
         env:
