@@ -12,7 +12,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
  *
  * <p>基于 {@link LengthFieldBasedFrameDecoder}：INITIAL_BYTES_TO_STRIP=4 剥掉长度前缀，
  * 剩余载荷为 type(1) + serial(8) + data。最小帧校验杜绝畸形帧导致的
- * NegativeArraySizeException，超长帧由 maxFrameLength 拦截。</p>
+ * NegativeArraySizeException，超长帧由 maxFrameLength 拦截，未知类型按协议违规拒绝。</p>
  */
 public class ProxyMessageDecoder extends LengthFieldBasedFrameDecoder {
 
@@ -36,6 +36,8 @@ public class ProxyMessageDecoder extends LengthFieldBasedFrameDecoder {
         byte[] data = new byte[dataLen];
         in.readBytes(data);
         in.release();
-        return new ProxyMessage(type, serial, data);
+        MessageType messageType = MessageType.fromCode(type)
+                .orElseThrow(() -> new DecoderException("unknown message type: " + type));
+        return new ProxyMessage(messageType, serial, data);
     }
 }

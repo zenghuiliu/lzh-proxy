@@ -7,8 +7,9 @@ import java.util.concurrent.TimeUnit;
 import org.lzh.proxy.config.AppConfig;
 import org.lzh.proxy.config.Constants;
 import org.lzh.proxy.config.ProxyBinding;
-import org.lzh.proxy.client.handler.ClientDataHandler;
-import org.lzh.proxy.client.handler.ClientIdleDataHandler;
+import org.lzh.proxy.control.ControlClientHandler;
+import org.lzh.proxy.control.RegisterProtocol;
+import org.lzh.proxy.forward.AppConnectionHandler;
 import org.lzh.proxy.forward.FlowControlHandler;
 import org.lzh.proxy.forward.TunnelRegistry;
 import org.lzh.proxy.lifecycle.Lifecycle;
@@ -113,11 +114,8 @@ public class Client implements Lifecycle {
                             registerChannel.pipeline().addLast(new ProxyMessageEncoder());
                             registerChannel.pipeline().addLast(new FlowControlHandler(() -> registry.clientChannel().values()));
                             registerChannel.pipeline().addLast(new IdleStateHandler(0, 0, 60, TimeUnit.SECONDS));
-                            registerChannel.pipeline().addLast(new ClientIdleDataHandler());
-                            registerChannel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, true, metrics));
-                            String info = proxy.binding().appIp() + "," + proxy.binding().appPort() + ","
-                                    + proxy.binding().remotePort() + "\r\n";
-                            registerChannel.writeAndFlush(ProxyMessage.register(info.getBytes()));
+                            registerChannel.pipeline().addLast(new ControlClientHandler(Client.this, proxy, metrics));
+                            registerChannel.writeAndFlush(ProxyMessage.register(RegisterProtocol.encode(proxy.binding())));
                             log.info("client connected register!");
                         } else {
                             timer.newTimeout(timeout -> registerConnect(proxy), 10, TimeUnit.SECONDS);
@@ -141,7 +139,7 @@ public class Client implements Lifecycle {
                         Channel registerChannel = proxy.registerChannel();
                         if (channel != null && channel.isOpen()) {
                             channel.attr(Constants.CHANNEL_SERIAL).set(serial);
-                            channel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, false, metrics));
+                            channel.pipeline().addLast(new AppConnectionHandler(Client.this, proxy, metrics));
                             registry.clientChannel().put(serial, channel);
                             metrics.tunnelOpened();
                             if (registerChannel != null && registerChannel.isOpen()) {

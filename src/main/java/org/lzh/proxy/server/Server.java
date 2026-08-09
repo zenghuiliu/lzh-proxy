@@ -7,9 +7,9 @@ import org.lzh.proxy.config.EndpointType;
 import org.lzh.proxy.config.ServerEndpoint;
 import org.lzh.proxy.core.SerialGenerator;
 import org.lzh.proxy.forward.TunnelRegistry;
+import org.lzh.proxy.forward.UserConnectionHandler;
 import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.management.MetricsRegistry;
-import org.lzh.proxy.server.handler.ServerDataHandler;
 import org.lzh.proxy.tunnel.ssh.SshSessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,7 +68,7 @@ public class Server implements Lifecycle {
         serverBootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
             @Override
             protected void initChannel(SocketChannel ch) {
-                ch.pipeline().addLast(new ServerDataHandler(registry, serial, metrics));
+                ch.pipeline().addLast(new UserConnectionHandler(registry, serial, metrics));
             }
         });
         List<ServerEndpoint> serverInfos = config.serverEndpoints();

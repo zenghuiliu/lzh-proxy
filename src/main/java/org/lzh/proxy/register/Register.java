@@ -2,13 +2,13 @@ package org.lzh.proxy.register;
 
 import org.lzh.proxy.config.AppConfig;
 import org.lzh.proxy.config.Constants;
+import org.lzh.proxy.control.ControlServerHandler;
 import org.lzh.proxy.forward.FlowControlHandler;
 import org.lzh.proxy.forward.TunnelRegistry;
 import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.protocol.ProxyMessageDecoder;
 import org.lzh.proxy.protocol.ProxyMessageEncoder;
-import org.lzh.proxy.register.handler.RegisterDataHandler;
 import org.lzh.proxy.server.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +70,7 @@ public class Register implements Lifecycle {
                         Constants.LENGTH_FIELD_LENGTH, Constants.LENGTH_ADJUSTMENT, Constants.INITIAL_BYTES_TO_STRIP));
                 pipeline.addLast(new ProxyMessageEncoder());
                 pipeline.addLast(new FlowControlHandler(() -> registry.serverChannel().values()));
-                pipeline.addLast(new RegisterDataHandler(registry, server, metrics));
+                pipeline.addLast(new ControlServerHandler(registry, server, metrics));
             }
         });
 

@@ -51,7 +51,7 @@ class ProxyMessageCodecTest {
         byte[] actual = new byte[out.readableBytes()];
         out.readBytes(actual);
         out.release();
-        assertThat(actual).isEqualTo(golden(Constants.TYPE_CONNECT, serial, null));
+        assertThat(actual).isEqualTo(golden(MessageType.CONNECT.code(), serial, null));
     }
 
     @Test
@@ -64,7 +64,7 @@ class ProxyMessageCodecTest {
         byte[] actual = new byte[out.readableBytes()];
         out.readBytes(actual);
         out.release();
-        assertThat(actual).isEqualTo(golden(Constants.TYPE_TRANSFER, serial, data));
+        assertThat(actual).isEqualTo(golden(MessageType.TRANSFER.code(), serial, data));
     }
 
     @Test
@@ -75,7 +75,7 @@ class ProxyMessageCodecTest {
         byte[] actual = new byte[out.readableBytes()];
         out.readBytes(actual);
         out.release();
-        assertThat(actual).isEqualTo(golden(Constants.TYPE_HEART_BEET_PING, -1L, null));
+        assertThat(actual).isEqualTo(golden(MessageType.HEARTBEAT_PING.code(), -1L, null));
     }
 
     @Test
@@ -108,7 +108,7 @@ class ProxyMessageCodecTest {
         // 长度字段声明 4 字节，但帧只有 type+serial(9) 实际足够——构造更小的：声明长度 2
         ByteBuf in = Unpooled.buffer();
         in.writeInt(2);          // 声称 body 只有 2 字节
-        in.writeByte(Constants.TYPE_TRANSFER);
+        in.writeByte(MessageType.TRANSFER.code());
         in.writeByte(0x00);
         in.writeLong(1L);        // 实际多余字节
         in.writeByte(0x00);

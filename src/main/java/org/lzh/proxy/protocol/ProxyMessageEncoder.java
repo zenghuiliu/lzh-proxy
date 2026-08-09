@@ -21,7 +21,7 @@ public class ProxyMessageEncoder extends MessageToByteEncoder<ProxyMessage> {
 
         out.writeInt(bodyLength);
 
-        out.writeByte(msg.type());
+        out.writeByte(msg.type().code());
         out.writeLong(msg.serial());
 
         if (msg.data() != null) {

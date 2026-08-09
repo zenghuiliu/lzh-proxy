@@ -29,17 +29,4 @@ public interface Constants {
 
     // 进入系统的请求序号占用字节数
     int SERIAL_SIZE = 8;
-    /**
-     * 以下是消息交换的类型
-     */
-    byte TYPE_CONNECT = 0x01;
-
-    byte TYPE_DISCONNECT = 0x02;
-
-    byte TYPE_TRANSFER = 0x03;
-
-    byte TYPE_REGISTER = 0x05;
-
-    byte TYPE_HEART_BEET_PING = 0x06;
-    byte TYPE_HEART_BEET_PONG = 0x07;
 }
