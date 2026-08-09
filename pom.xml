@@ -34,11 +34,11 @@
             <artifactId>logback-classic</artifactId>
             <version>1.5.6</version>
         </dependency>
-        <!-- SSH 连接/转发（Phase 3 替换为 Apache MINA SSHD） -->
+        <!-- SSH 连接/转发：Apache MINA SSHD -->
         <dependency>
-            <groupId>com.jcraft</groupId>
-            <artifactId>jsch</artifactId>
-            <version>0.1.55</version>
+            <groupId>org.apache.sshd</groupId>
+            <artifactId>sshd-core</artifactId>
+            <version>2.14.0</version>
         </dependency>
 
         <!-- 测试 -->

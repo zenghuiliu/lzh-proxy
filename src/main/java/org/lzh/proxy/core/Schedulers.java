@@ -15,7 +15,7 @@ import org.lzh.proxy.util.NamedThreadFactory;
 public class Schedulers implements Lifecycle {
 
     private final ScheduledExecutorService sshKeepAlive =
-            Executors.newScheduledThreadPool(1, new NamedThreadFactory("lzh-proxy-ssh-keepalive"));
+            Executors.newScheduledThreadPool(2, new NamedThreadFactory("lzh-proxy-ssh"));
 
     /** SSH 保活 / 重连调度线程池。 */
     public ScheduledExecutorService sshKeepAlive() {

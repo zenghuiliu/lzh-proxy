@@ -2,6 +2,7 @@ package org.lzh.proxy;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import org.lzh.proxy.config.AppConfig;
 import org.lzh.proxy.config.ConfigValidationException;
@@ -64,14 +65,29 @@ public final class Launcher {
                 ? new ServerLauncher(config)
                 : new ClientLauncher(config);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(app::stop, "lzh-proxy-shutdown"));
+        // main 线程阻塞等待关闭信号；关闭钩子触发优雅停机后放行，
+        // 避免依赖"非守护线程存活"来维持 JVM 进程。
+        CountDownLatch shutdownLatch = new CountDownLatch(1);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                app.stop();
+            } finally {
+                shutdownLatch.countDown();
+            }
+        }, "lzh-proxy-shutdown"));
 
         try {
             app.start();
         } catch (Exception e) {
             LoggerFactory.getLogger(Launcher.class).error("启动失败", e);
             app.stop();
+            shutdownLatch.countDown();
             System.exit(1);
+        }
+        try {
+            shutdownLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

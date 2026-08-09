@@ -22,5 +22,6 @@
             "path": "D:\\lzh\\java\\jdk\\jdk-25.0.4+7"
         }
     ],
-    "java.dependency.packagePresentation": "hierarchical"
+    "java.dependency.packagePresentation": "hierarchical",
+    "java.configuration.updateBuildConfiguration": "automatic"
 }

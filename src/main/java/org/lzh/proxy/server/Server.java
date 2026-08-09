@@ -9,7 +9,7 @@ import org.lzh.proxy.core.SerialGenerator;
 import org.lzh.proxy.forward.TunnelRegistry;
 import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.server.handler.ServerDataHandler;
-import org.lzh.proxy.server.ssh.SSHClient;
+import org.lzh.proxy.tunnel.ssh.SshSessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,17 +38,17 @@ public class Server implements Lifecycle {
     private final EventLoopGroup workGroup;
     private final TunnelRegistry registry;
     private final SerialGenerator serial;
-    private final SSHClient sshClient;
+    private final SshSessionManager sshManager;
     private final ServerBootstrap serverBootstrap = new ServerBootstrap();
 
     public Server(AppConfig config, EventLoopGroup bossGroup, EventLoopGroup workGroup, TunnelRegistry registry,
-                  SerialGenerator serial, SSHClient sshClient) {
+                  SerialGenerator serial, SshSessionManager sshManager) {
         this.config = config;
         this.bossGroup = bossGroup;
         this.workGroup = workGroup;
         this.registry = registry;
         this.serial = serial;
-        this.sshClient = sshClient;
+        this.sshManager = sshManager;
     }
 
     @Override
@@ -73,7 +73,7 @@ public class Server implements Lifecycle {
             if (serverInfo.type() == EndpointType.TCP) {
                 bindPort(serverInfo);
             } else if (serverInfo.type() == EndpointType.SSH) {
-                sshClient.addForward(serverInfo);
+                sshManager.addForward(serverInfo);
             }
         }
     }

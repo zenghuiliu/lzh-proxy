@@ -9,7 +9,7 @@ import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.lifecycle.LifecycleRegistry;
 import org.lzh.proxy.register.Register;
 import org.lzh.proxy.server.Server;
-import org.lzh.proxy.server.ssh.SSHClient;
+import org.lzh.proxy.tunnel.ssh.SshSessionManager;
 
 /**
  * 服务端组合根：装配事件循环、SSH 会话、服务端监听与注册监听，编排生命周期。
@@ -30,13 +30,13 @@ public class ServerLauncher implements Lifecycle {
         TunnelRegistry tunnelRegistry = new TunnelRegistry();
         SerialGenerator serialGenerator = new SerialGenerator();
 
-        SSHClient sshClient = new SSHClient(config, schedulers.sshKeepAlive());
-        Server server = new Server(config, netty.boss(), netty.worker(), tunnelRegistry, serialGenerator, sshClient);
+        SshSessionManager sshManager = new SshSessionManager(config, schedulers.sshKeepAlive());
+        Server server = new Server(config, netty.boss(), netty.worker(), tunnelRegistry, serialGenerator, sshManager);
         Register register = new Register(config, netty.boss(), netty.worker(), tunnelRegistry, server);
 
         registry.register(netty)
                 .register(schedulers)
-                .register(sshClient)
+                .register(sshManager)
                 .register(server)
                 .register(register);
         registry.start();
