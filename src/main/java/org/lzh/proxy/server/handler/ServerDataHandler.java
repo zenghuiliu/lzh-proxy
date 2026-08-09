@@ -1,76 +1,81 @@
 package org.lzh.proxy.server.handler;
 
+import org.lzh.proxy.config.Constants;
+import org.lzh.proxy.core.SerialGenerator;
+import org.lzh.proxy.forward.TunnelRegistry;
+import org.lzh.proxy.protocol.ProxyMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
-import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
 
-import org.lzh.proxy.Main;
-import org.lzh.proxy.config.ChannelChache;
-import org.lzh.proxy.config.Constants;
-import org.lzh.proxy.protocol.ProxyMessage;
-
-@Slf4j
+/**
+ * 服务端入站用户连接处理器：分配序列号、暂停读、向控制通道发送 CONNECT/TRANSFER/DISCONNECT。
+ */
 public class ServerDataHandler extends SimpleChannelInboundHandler<ByteBuf> {
+
+    private static final Logger log = LoggerFactory.getLogger(ServerDataHandler.class);
+
+    private final TunnelRegistry registry;
+    private final SerialGenerator serial;
+
+    public ServerDataHandler(TunnelRegistry registry, SerialGenerator serial) {
+        this.registry = registry;
+        this.serial = serial;
+    }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         Channel channel = ctx.channel();
-        channel.config().setOption(ChannelOption.AUTO_READ,false);
+        channel.config().setOption(ChannelOption.AUTO_READ, false);
 
-        Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
-        serial.set(Main.serverChannelSerial.getAndIncrement());
-        ChannelChache.serverChannelMap.put(serial.get(),channel);
-        log.info("channel is active :{}",channel);
-        sendMsg(channel,Constants.TYPE_CONNECT,null);
+        Attribute<Long> serialAttr = channel.attr(Constants.CHANNEL_SERIAL);
+        serialAttr.set(serial.next());
+        registry.serverChannel().put(serialAttr.get(), channel);
+        log.info("channel is active :{}", channel);
+        sendMsg(channel, Constants.TYPE_CONNECT, null);
         super.channelActive(ctx);
     }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
         Channel reqChannel = ctx.channel();
-        sendMsg(reqChannel,Constants.TYPE_TRANSFER,msg);
+        sendMsg(reqChannel, Constants.TYPE_TRANSFER, msg);
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         Channel channel = ctx.channel();
-        sendMsg(channel,Constants.TYPE_DISCONNECT,null);
-        if (channel != null && channel.isOpen()){
+        sendMsg(channel, Constants.TYPE_DISCONNECT, null);
+        if (channel != null && channel.isOpen()) {
             channel.close();
         }
-        // 移除引用
-        Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
-        ChannelChache.serverChannelMap.remove(serial.get());
-        log.debug("channel is closed:{}",channel);
+        Attribute<Long> serialAttr = channel.attr(Constants.CHANNEL_SERIAL);
+        registry.serverChannel().remove(serialAttr.get());
+        log.debug("channel is closed:{}", channel);
         super.channelInactive(ctx);
     }
 
-
-    private void sendMsg(Channel channel,Byte type,ByteBuf msg) {
+    private void sendMsg(Channel channel, byte type, ByteBuf msg) {
         InetSocketAddress socketAddress = (InetSocketAddress) channel.localAddress();
         int port = socketAddress.getPort();
-        Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
-        Channel proxyChannel = ChannelChache.proxyToReqMap.get(port);
-        if(proxyChannel == null){
+        Attribute<Long> serialAttr = channel.attr(Constants.CHANNEL_SERIAL);
+        Channel proxyChannel = registry.proxyToReq().get(port);
+        if (proxyChannel == null || !proxyChannel.isOpen()) {
             return;
         }
-        if (proxyChannel.isOpen()){
-            ProxyMessage proxyMessage = new ProxyMessage();
-            proxyMessage.setType(type);
-            proxyMessage.setSerial(serial.get());
-            if (msg != null) {
-                byte[] bytes = new byte[msg.readableBytes()];
-                msg.readBytes(bytes);
-                proxyMessage.setData(bytes);
-            }
-            proxyChannel.writeAndFlush(proxyMessage);
+        byte[] bytes = null;
+        if (msg != null) {
+            bytes = new byte[msg.readableBytes()];
+            msg.readBytes(bytes);
         }
+        proxyChannel.writeAndFlush(new ProxyMessage(type, serialAttr.get(), bytes));
     }
 }

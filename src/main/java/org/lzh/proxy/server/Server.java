@@ -2,13 +2,16 @@ package org.lzh.proxy.server;
 
 import java.util.List;
 
-import org.apache.commons.lang3.StringUtils;
-import org.lzh.proxy.Main;
-import org.lzh.proxy.config.ChannelChache;
-import org.lzh.proxy.config.GlobalConfig;
-import org.lzh.proxy.config.GlobalConfig.ServerInfo;
+import org.lzh.proxy.config.AppConfig;
+import org.lzh.proxy.config.EndpointType;
+import org.lzh.proxy.config.ServerEndpoint;
+import org.lzh.proxy.core.SerialGenerator;
+import org.lzh.proxy.forward.TunnelRegistry;
+import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.server.handler.ServerDataHandler;
 import org.lzh.proxy.server.ssh.SSHClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -16,19 +19,43 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
-public class Server {
-    ServerBootstrap serverBootstrap = new ServerBootstrap();
+/**
+ * 服务端暴露端口监听器（替代原静态 Server）。
+ *
+ * <p>管理 Netty 代理链路（TCP 类型）与 SSH 转发（SSH 类型），
+ * 由组合根注入配置、事件循环与共享注册表。</p>
+ */
+public class Server implements Lifecycle {
 
-    public void init() {
-        serverBootstrap.group(Main.bossgroup, Main.workgroup);
+    private static final Logger log = LoggerFactory.getLogger(Server.class);
+
+    private final AppConfig config;
+    private final EventLoopGroup bossGroup;
+    private final EventLoopGroup workGroup;
+    private final TunnelRegistry registry;
+    private final SerialGenerator serial;
+    private final SSHClient sshClient;
+    private final ServerBootstrap serverBootstrap = new ServerBootstrap();
+
+    public Server(AppConfig config, EventLoopGroup bossGroup, EventLoopGroup workGroup, TunnelRegistry registry,
+                  SerialGenerator serial, SSHClient sshClient) {
+        this.config = config;
+        this.bossGroup = bossGroup;
+        this.workGroup = workGroup;
+        this.registry = registry;
+        this.serial = serial;
+        this.sshClient = sshClient;
+    }
+
+    @Override
+    public void start() {
+        serverBootstrap.group(bossGroup, workGroup);
         serverBootstrap.channel(NioServerSocketChannel.class);
-        // 设置tcp连接队列长度
+        // tcp连接队列长度
         serverBootstrap.option(ChannelOption.SO_BACKLOG, 1024);
         // SO_SNDBUF发送缓冲区，SO_RCVBUF接收缓冲区，SO_KEEPALIVE开启TCP连接保持
         serverBootstrap.childOption(ChannelOption.SO_SNDBUF, 16 * 1024)
@@ -37,37 +64,38 @@ public class Server {
 
         serverBootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
             @Override
-            protected void initChannel(SocketChannel ch) throws Exception {
-                ChannelPipeline pipeline = ch.pipeline();
-                pipeline.addLast(new ServerDataHandler());
+            protected void initChannel(SocketChannel ch) {
+                ch.pipeline().addLast(new ServerDataHandler(registry, serial));
             }
         });
-        List<ServerInfo> serverInfos = GlobalConfig.getInstance().getServerInfos();
-        if (serverInfos != null) {
-            for (ServerInfo serverInfo : serverInfos) {
-                if (StringUtils.isBlank(serverInfo.getType()) || serverInfo.getType().equalsIgnoreCase("tcp")) {
-                    bindPort(serverInfo);
-                } else if (serverInfo.getType().equalsIgnoreCase("ssh")) {
-                    SSHClient.addForward(serverInfo);
-                }
+        List<ServerEndpoint> serverInfos = config.serverEndpoints();
+        for (ServerEndpoint serverInfo : serverInfos) {
+            if (serverInfo.type() == EndpointType.TCP) {
+                bindPort(serverInfo);
+            } else if (serverInfo.type() == EndpointType.SSH) {
+                sshClient.addForward(serverInfo);
             }
         }
     }
 
+    @Override
+    public void stop() {
+        registry.portToServer().values().forEach(Channel::close);
+        registry.portToServer().clear();
+    }
 
-    public void bindPort(ServerInfo serverInfo) {
-        serverBootstrap.bind(serverInfo.getPort()).addListener(new ChannelFutureListener() {
+    public void bindPort(ServerEndpoint serverInfo) {
+        serverBootstrap.bind(serverInfo.port()).addListener(new ChannelFutureListener() {
             @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
+            public void operationComplete(ChannelFuture future) {
                 Channel channel = future.channel();
-                if (channel.isOpen()) {
-                    ChannelChache.portToServerMap.put(serverInfo.getPort(), channel);
-                    log.info("{} server started !", channel.localAddress().toString());
+                if (channel != null && channel.isOpen()) {
+                    registry.portToServer().put(serverInfo.port(), channel);
+                    log.info("{} server started !", channel.localAddress());
                 } else {
-                    log.error("{} server start error !", channel.localAddress().toString());
+                    log.error("{} server start error !", channel.localAddress());
                 }
             }
         });
     }
-
 }

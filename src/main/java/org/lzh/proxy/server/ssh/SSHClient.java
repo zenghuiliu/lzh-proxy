@@ -5,153 +5,162 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-import org.lzh.proxy.Main;
-import org.lzh.proxy.config.GlobalConfig;
-import org.lzh.proxy.config.GlobalConfig.SSHInfo;
-import org.lzh.proxy.config.GlobalConfig.ServerInfo;
+import org.lzh.proxy.config.AppConfig;
+import org.lzh.proxy.config.ServerEndpoint;
+import org.lzh.proxy.config.SshAuthConfig;
+import org.lzh.proxy.config.SshEndpointConfig;
+import org.lzh.proxy.lifecycle.Lifecycle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 
-import cn.hutool.core.text.CharSequenceUtil;
-import cn.hutool.cron.timingwheel.TimerTask;
-import lombok.extern.slf4j.Slf4j;
+/**
+ * SSH 跳板会话管理（Phase 1：JSch 实现，Phase 3 由 Apache MINA SSHD 状态机重写）。
+ *
+ * <p>替代原静态 SSHClient：实例注入配置与调度线程池，保活由调度器驱动。
+ * 注意：Phase 1 仍为密码认证；私钥认证与主机密钥校验由 Phase 3 提供。</p>
+ */
+public class SSHClient implements Lifecycle {
 
-@Slf4j
-public class SSHClient {
-    private static JSch jSch = new JSch();
-    private static Integer defaultPort = 22;
-    private static ConcurrentHashMap<String, Session> sessionMap = new ConcurrentHashMap<>();
-    private static Map<String, List<ServerInfo>> forwardMap = new ConcurrentHashMap<>();
+    private static final Logger log = LoggerFactory.getLogger(SSHClient.class);
 
-    public void init() {
-        List<SSHInfo> sshInfos = GlobalConfig.getInstance().getSshInfos();
-        sshInfos.forEach(sshInfo -> {
-            connectSession(sshInfo);
-        });
+    private static final int DEFAULT_KEEPALIVE_INTERVAL_MS = 1000;
+
+    private final AppConfig config;
+    private final ScheduledExecutorService scheduler;
+    private final JSch jSch = new JSch();
+    private final ConcurrentHashMap<String, Session> sessionMap = new ConcurrentHashMap<>();
+    private final Map<String, List<ServerEndpoint>> forwardMap = new ConcurrentHashMap<>();
+
+    public SSHClient(AppConfig config, ScheduledExecutorService scheduler) {
+        this.config = config;
+        this.scheduler = scheduler;
     }
 
-    public static Boolean addSession(String id, Session session) {
+    @Override
+    public void start() {
+        List<SshEndpointConfig> sshInfos = config.sshEndpoints();
+        for (SshEndpointConfig sshInfo : sshInfos) {
+            connectSession(sshInfo);
+        }
+    }
+
+    @Override
+    public void stop() {
+        disconnect();
+    }
+
+    public Boolean addSession(String id, Session session) {
         removeSession(id);
         sessionMap.put(id, session);
         return true;
     }
 
-    public static Boolean removeSession(String id) {
+    public Boolean removeSession(String id) {
         Session session = sessionMap.get(id);
         if (session != null) {
-            JschUserInfo userInfo = (JschUserInfo) session.getUserInfo();
-            userInfo.setKeepAliveFlag(false);
+            Object userInfo = session.getUserInfo();
+            if (userInfo instanceof JschUserInfo jui) {
+                jui.setKeepAliveFlag(false);
+            }
             session.disconnect();
             sessionMap.remove(id);
         }
         return true;
     }
 
-    public static Boolean addForward(ServerInfo serverInfo) {
+    public Boolean addForward(ServerEndpoint serverInfo) {
         removeForward(serverInfo);
-        if (serverInfo == null || CharSequenceUtil.isBlank(serverInfo.getSshId())) {
+        if (serverInfo == null || isBlank(serverInfo.sshId())) {
             log.warn("addForward parameters is invalid");
             return false;
         }
         try {
-            Session session = getSession(serverInfo.getSshId());
+            Session session = getSession(serverInfo.sshId());
             if (session == null) {
-                log.warn("not found session[{}]！", serverInfo.getSshId());
+                log.warn("not found session[{}]！", serverInfo.sshId());
                 return false;
             }
-            forwardLocal(session, serverInfo.getPort(), serverInfo.getForwardIp(),
-                    serverInfo.getForwardPort());
-            List<ServerInfo> serverInfos = forwardMap.get(serverInfo.getSshId());
-            if (serverInfos == null) {
-                serverInfos = new ArrayList<>();
-                forwardMap.put(serverInfo.getSshId(), serverInfos);
-            }
+            forwardLocal(session, serverInfo.port(), serverInfo.forwardIp(), serverInfo.forwardPort());
+            List<ServerEndpoint> serverInfos = forwardMap.computeIfAbsent(serverInfo.sshId(), k -> new ArrayList<>());
             serverInfos.add(serverInfo);
         } catch (Exception e) {
-            log.error("session[{}] forward[ip:{};port:{}] fail.", serverInfo.getSshId(), serverInfo.getForwardIp(),
-                    serverInfo.getForwardPort(), e);
+            log.error("session[{}] forward[ip:{};port:{}] fail.", serverInfo.sshId(), serverInfo.forwardIp(),
+                    serverInfo.forwardPort(), e);
         }
         return true;
     }
 
-    public static Boolean removeForward(ServerInfo serverInfo) {
-        Session session = sessionMap.get(serverInfo.getSshId());
-        if (session != null) {
-            if (session.isConnected()) {
-                try {
-                    String[] pfls = session.getPortForwardingL();
-                    if (pfls != null && pfls.length > 0) {
-                        for (String pfl : pfls) {
-                            String[] temp = pfl.split(":");
-                            if (temp[0].equals(serverInfo.getPort().toString())) {
-                                session.delPortForwardingL(serverInfo.getPort());
-                            }
+    public Boolean removeForward(ServerEndpoint serverInfo) {
+        Session session = sessionMap.get(serverInfo.sshId());
+        if (session != null && session.isConnected()) {
+            try {
+                String[] pfls = session.getPortForwardingL();
+                if (pfls != null) {
+                    for (String pfl : pfls) {
+                        String[] temp = pfl.split(":");
+                        if (temp[0].equals(Integer.toString(serverInfo.port()))) {
+                            session.delPortForwardingL(serverInfo.port());
                         }
                     }
-                } catch (JSchException e) {
-                    log.info("delete forward[ip:{};port:{}] exception", serverInfo.getForwardIp(),
-                            serverInfo.getForwardPort(), e);
                 }
+            } catch (JSchException e) {
+                log.info("delete forward[ip:{};port:{}] exception", serverInfo.forwardIp(),
+                        serverInfo.forwardPort(), e);
             }
         }
-        List<ServerInfo> serverInfos = forwardMap.get(serverInfo.getSshId());
+        List<ServerEndpoint> serverInfos = forwardMap.get(serverInfo.sshId());
         if (serverInfos != null) {
-            Iterator<ServerInfo> iterator = serverInfos.iterator();
+            Iterator<ServerEndpoint> iterator = serverInfos.iterator();
             while (iterator.hasNext()) {
-                ServerInfo info = iterator.next();
-                if (serverInfo.getSshId().equals(info.getSshId())
-                        && serverInfo.getForwardIp().equals(info.getForwardIp())
-                        && serverInfo.getForwardPort().equals(info.getForwardPort())) {
+                ServerEndpoint info = iterator.next();
+                if (serverInfo.sshId().equals(info.sshId())
+                        && serverInfo.forwardIp().equals(info.forwardIp())
+                        && serverInfo.forwardPort().equals(info.forwardPort())) {
                     log.info("remove server info!");
                     iterator.remove();
                 }
             }
-            // System.out.println(serverInfos.size());;
         }
         return true;
     }
 
     public Boolean isExistSession(String id) {
-        if (CharSequenceUtil.isBlank(id)) {
-            return false;
-        }
-        if (sessionMap.containsKey(id)) {
-            return true;
-        }
-        return false;
+        return !isBlank(id) && sessionMap.containsKey(id);
     }
 
-    public static Session getSession(String id) {
+    public Session getSession(String id) {
         Session session = sessionMap.get(id);
         if (session != null) {
             if (session.isConnected()) {
                 return session;
-            } else {
-                removeSession(id);
             }
+            removeSession(id);
         }
         return null;
     }
 
-    public static Session connectSession(SSHInfo sshInfo) {
+    public Session connectSession(SshEndpointConfig sshInfo) {
         try {
-            if (sshInfo.getPort() == null || sshInfo.getPort() == 0) {
-                sshInfo.setPort(defaultPort);
-            }
-            Session session = null;
-            if (sessionMap.containsKey(sshInfo.getId())) {
-                session = sessionMap.get(sshInfo.getId());
-                if (session.isConnected()) {
-                    return session;
-                }
+            Session session = sessionMap.get(sshInfo.id());
+            if (session != null && session.isConnected()) {
+                return session;
             }
 
-            session = jSch.getSession(sshInfo.getUsername(), sshInfo.getIp(), sshInfo.getPort());
-            session.setPassword(sshInfo.getPassword());
-            // 关闭确认提示
+            session = jSch.getSession(sshInfo.username(), sshInfo.host(), sshInfo.port());
+            String password = passwordOf(sshInfo);
+            if (password == null) {
+                log.warn("ssh[{}] 私钥认证将在 Phase 3 支持，当前跳过", sshInfo.id());
+                return null;
+            }
+            session.setPassword(password);
+            // 关闭主机密钥确认提示（Phase 3 提供主机密钥校验）
             session.setConfig("StrictHostKeyChecking", "no");
 
             JschUserInfo jschUserInfo = new JschUserInfo();
@@ -159,74 +168,79 @@ public class SSHClient {
             jschUserInfo.setSshInfo(sshInfo);
             session.setUserInfo(jschUserInfo);
 
-            session.connect(10000);
+            session.connect(sshInfo.connectTimeoutMs());
 
-            addSession(sshInfo.getId(), session);
+            addSession(sshInfo.id(), session);
 
             sessionKeepAlive(session);
             return session;
         } catch (Exception exception) {
-            log.error("ssh连接失败:id[{}];ip[{}];port:{}", sshInfo.getId(), sshInfo.getIp(), sshInfo.getPort(), exception);
+            log.error("ssh连接失败:id[{}];ip[{}];port:{}", sshInfo.id(), sshInfo.host(), sshInfo.port(), exception);
         }
         return null;
-
     }
 
-    private static void sessionKeepAlive(Session session) {
-        if (session != null) {
-            JschUserInfo userInfo = (JschUserInfo) session.getUserInfo();
-            synchronized (userInfo.getSshInfo().getId().intern()) {
-                // log.debug("session[{}] send keep alive", userInfo.getSshInfo().getId());
-                if (session.isConnected()) {
-                    try {
-                        session.sendKeepAliveMsg();
-                        if (userInfo.getKeepAliveFlag()) {
-                            Main.SYSTEM_TIMER.addTask(new TimerTask(() -> {
-                                sessionKeepAlive(session);
-                            }, 1000));
-                        }
-                    } catch (Exception e) {
-                        log.error("session[{}] keep alive fail !", userInfo.getSshInfo().getId(), e);
-                    }
-                } else {
-                    reInitSession(session);
-                    log.debug("session[{}] is reconnected", userInfo.getSshInfo().getId());
-                }
+    private static String passwordOf(SshEndpointConfig sshInfo) {
+        if (sshInfo.auth() instanceof SshAuthConfig.PasswordAuth passwordAuth) {
+            return passwordAuth.password();
+        }
+        return null;
+    }
+
+    private void sessionKeepAlive(Session session) {
+        if (session == null) {
+            return;
+        }
+        JschUserInfo userInfo = (JschUserInfo) session.getUserInfo();
+        synchronized (userInfo.getSshInfo().id().intern()) {
+            if (!Boolean.TRUE.equals(userInfo.getKeepAliveFlag())) {
+                return;
             }
+            if (session.isConnected()) {
+                try {
+                    session.sendKeepAliveMsg();
+                } catch (Exception e) {
+                    log.error("session[{}] keep alive fail !", userInfo.getSshInfo().id(), e);
+                }
+            } else {
+                reInitSession(session);
+            }
+            // 始终重新调度：断连重连失败后继续重试（Phase 3 以退避状态机替代）
+            scheduler.schedule(() -> sessionKeepAlive(session), DEFAULT_KEEPALIVE_INTERVAL_MS, TimeUnit.MILLISECONDS);
         }
     }
 
-    public static void reInitSession(Session session) {
+    public void reInitSession(Session session) {
         JschUserInfo userInfo = (JschUserInfo) session.getUserInfo();
         connectSession(userInfo.getSshInfo());
-        List<ServerInfo> serverInfos = forwardMap.get(userInfo.getSshInfo().getId());
+        List<ServerEndpoint> serverInfos = forwardMap.get(userInfo.getSshInfo().id());
         if (serverInfos != null) {
-            Iterator<ServerInfo> infos = serverInfos.iterator();
+            Iterator<ServerEndpoint> infos = serverInfos.iterator();
             while (infos.hasNext()) {
-                ServerInfo info = infos.next();
+                ServerEndpoint info = infos.next();
                 addForward(info);
             }
-            ;
-            // System.out.println(serverInfos.size());
         }
     }
 
-    public static Boolean forwardLocal(Session session, Integer localPort, String forwardHost, Integer forwardPort) {
+    public Boolean forwardLocal(Session session, Integer localPort, String forwardHost, Integer forwardPort) {
         try {
             if (session != null && session.isConnected()) {
                 session.setPortForwardingL(localPort, forwardHost, forwardPort);
                 return true;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("forward local[{} -> {}:{}] fail", localPort, forwardHost, forwardPort, e);
         }
         return false;
     }
 
-    public static void disconnect() {
-        sessionMap.forEach((key, session) -> {
-            session.disconnect();
-        });
+    public void disconnect() {
+        sessionMap.forEach((key, session) -> session.disconnect());
+        sessionMap.clear();
     }
 
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
 }

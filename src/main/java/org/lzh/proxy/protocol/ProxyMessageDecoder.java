@@ -4,35 +4,21 @@ import org.lzh.proxy.config.Constants;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.DecoderException;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 
+/**
+ * 代理消息解码器。
+ *
+ * <p>基于 {@link LengthFieldBasedFrameDecoder}：INITIAL_BYTES_TO_STRIP=4 剥掉长度前缀，
+ * 剩余载荷为 type(1) + serial(8) + data。最小帧校验杜绝畸形帧导致的
+ * NegativeArraySizeException，超长帧由 maxFrameLength 拦截。</p>
+ */
 public class ProxyMessageDecoder extends LengthFieldBasedFrameDecoder {
 
-
-
-    /**
-     * @param maxFrameLength
-     * @param lengthFieldOffset
-     * @param lengthFieldLength
-     * @param lengthAdjustment
-     * @param initialBytesToStrip
-     */
-    public ProxyMessageDecoder(int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment,
-            int initialBytesToStrip) {
+    public ProxyMessageDecoder(int maxFrameLength, int lengthFieldOffset, int lengthFieldLength,
+                               int lengthAdjustment, int initialBytesToStrip) {
         super(maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip);
-    }
-
-    /**
-     * @param maxFrameLength
-     * @param lengthFieldOffset
-     * @param lengthFieldLength
-     * @param lengthAdjustment
-     * @param initialBytesToStrip
-     * @param failFast
-     */
-    public ProxyMessageDecoder(int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment,
-            int initialBytesToStrip, boolean failFast) {
-        super(maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip, failFast);
     }
 
     @Override
@@ -41,29 +27,15 @@ public class ProxyMessageDecoder extends LengthFieldBasedFrameDecoder {
         if (in == null) {
             return null;
         }
-
-        if (in.readableBytes() < Constants.HEADER_SIZE) {
-            return null;
+        if (in.readableBytes() < Constants.TYPE_SIZE + Constants.SERIAL_SIZE) {
+            throw new DecoderException("proxy frame too small: " + in.readableBytes() + " bytes");
         }
-
-        int frameLength = in.readInt();
-        if (in.readableBytes() < frameLength) {
-            return null;
-        }
-        ProxyMessage proxyMessage = new ProxyMessage();
         byte type = in.readByte();
         long serial = in.readLong();
-
-        proxyMessage.setSerial(serial);
-
-        proxyMessage.setType(type);
-
-        byte[] data = new byte[frameLength - Constants.TYPE_SIZE - Constants.SERIAL_SIZE];
+        int dataLen = in.readableBytes();
+        byte[] data = new byte[dataLen];
         in.readBytes(data);
-        proxyMessage.setData(data);
-
         in.release();
-
-        return proxyMessage;
+        return new ProxyMessage(type, serial, data);
     }
 }

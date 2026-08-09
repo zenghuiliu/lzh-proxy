@@ -1,17 +1,21 @@
 package org.lzh.proxy.client;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import org.lzh.proxy.Main;
+import org.lzh.proxy.config.AppConfig;
+import org.lzh.proxy.config.Constants;
+import org.lzh.proxy.config.ProxyBinding;
 import org.lzh.proxy.client.handler.ClientDataHandler;
 import org.lzh.proxy.client.handler.ClientIdleDataHandler;
-import org.lzh.proxy.config.ChannelChache;
-import org.lzh.proxy.config.Constants;
-import org.lzh.proxy.config.GlobalConfig;
-import org.lzh.proxy.config.GlobalConfig.ProxyInfo;
+import org.lzh.proxy.forward.TunnelRegistry;
+import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.protocol.ProxyMessage;
 import org.lzh.proxy.protocol.ProxyMessageDecoder;
 import org.lzh.proxy.protocol.ProxyMessageEncoder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -19,100 +23,131 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.Attribute;
 import io.netty.util.HashedWheelTimer;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
-public class Client {
-    public static Bootstrap bootstrap = new Bootstrap();
-    public static HashedWheelTimer timer = new HashedWheelTimer();
+/**
+ * 客户端连接器（替代原静态 Client）。
+ *
+ * <p>为每条代理绑定建立注册（控制）通道，并在收到 CONNECT 时连接被代理应用。</p>
+ */
+public class Client implements Lifecycle {
 
-    public void init(){
+    private static final Logger log = LoggerFactory.getLogger(Client.class);
+
+    private final AppConfig config;
+    private final EventLoopGroup eventLoop;
+    private final TunnelRegistry registry;
+    private final Bootstrap bootstrap = new Bootstrap();
+    private final HashedWheelTimer timer = new HashedWheelTimer();
+    private final List<ClientProxy> proxies = new ArrayList<>();
+
+    public Client(AppConfig config, EventLoopGroup eventLoop, TunnelRegistry registry) {
+        this.config = config;
+        this.eventLoop = eventLoop;
+        this.registry = registry;
+    }
+
+    public TunnelRegistry registry() {
+        return registry;
+    }
+
+    public int registerPort() {
+        return config.register().port();
+    }
+
+    @Override
+    public void start() {
+        timer.start();
         bootstrap.channel(NioSocketChannel.class);
-        bootstrap.group(Main.bossgroup);
+        bootstrap.group(eventLoop);
         bootstrap.handler(new ChannelInitializer<SocketChannel>() {
             @Override
-            protected void initChannel(SocketChannel ch) throws Exception {
-
+            protected void initChannel(SocketChannel ch) {
+                // 实际 pipeline 在连接建立后按用途添加
             }
         });
-        for (ProxyInfo proxyInfo : GlobalConfig.getInstance().getProxyInfos()){
-            // connect register
-            registerConnect(proxyInfo);
+        for (ProxyBinding binding : config.proxyBindings()) {
+            ClientProxy proxy = new ClientProxy(binding);
+            proxies.add(proxy);
+            registerConnect(proxy);
         }
     }
 
-    public static void registerConnect(ProxyInfo proxyInfo){
-        if (proxyInfo.getRegister() == null || !proxyInfo.getRegister().isOpen()) {
-            bootstrap.connect(GlobalConfig.getInstance().getRegisterIp().trim(), GlobalConfig.getInstance().getRegisterPort()).addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture future) throws Exception {
-                    Channel registerChannel = future.channel();
-                    proxyInfo.setRegister(registerChannel);
-                    if (registerChannel != null && registerChannel.isOpen()) {
-                        registerChannel.config().setOption(ChannelOption.SO_KEEPALIVE,true);
-                        registerChannel.pipeline().addLast(new ProxyMessageDecoder(Constants.MAX_FRAME_LENGTH, Constants.LENGTH_FIELD_OFFSET, Constants.LENGTH_FIELD_LENGTH, Constants.LENGTH_ADJUSTMENT, Constants.INITIAL_BYTES_TO_STRIP));
-                        registerChannel.pipeline().addLast(new ProxyMessageEncoder());
-                        registerChannel.pipeline().addLast(new IdleStateHandler(0,0,60,TimeUnit.SECONDS));
-                        registerChannel.pipeline().addLast(new ClientIdleDataHandler());
-                        registerChannel.pipeline().addLast(new ClientDataHandler(proxyInfo,true));
-                        String info = proxyInfo.getIp() + "," + proxyInfo.getPort() + "," + proxyInfo.getRemotePort() + "\r\n";
-                        ProxyMessage proxyMessage = new ProxyMessage();
-                        proxyMessage.setType(Constants.TYPE_REGISTER);
-                        proxyMessage.setData(info.getBytes());
-                        registerChannel.writeAndFlush(proxyMessage);
-                        log.info("client connected register!");
-                    } else {
-                        timer.newTimeout(timeout -> {registerConnect(proxyInfo);},10, TimeUnit.SECONDS);
-                        log.error("client connect register error!");
-                    }
-                }
-            });
-        }
-    }
-
-    public static void proxyConnect(ProxyInfo proxyInfo,Long serial){
-        if (proxyInfo.getChannel() == null || !proxyInfo.getChannel().isOpen()) {
-            ChannelFuture channelFuture = bootstrap.connect(proxyInfo.getIp().trim(), proxyInfo.getPort()).addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture future) throws Exception {
-                    Channel channel = future.channel();
-                    Attribute<Long> serialAttr = channel.attr(Constants.CHANNEL_SERIAL);
-                    serialAttr.set(serial);
-                    Channel registerChannel = proxyInfo.getRegister();
-                    if (channel != null && channel.isOpen()) {
-                        channel.pipeline().addLast(new ClientDataHandler(proxyInfo,false));
-                        if (registerChannel != null && registerChannel.isOpen()){
-                            ProxyMessage proxyMessage = new ProxyMessage();
-                            proxyMessage.setSerial(serial);
-                            proxyMessage.setType(Constants.TYPE_CONNECT);
-                            proxyMessage.setData(null);
-                            registerChannel.writeAndFlush(proxyMessage);
-                        }
-                        log.debug("client connected proxy! serial：{}",serial);
-                    } else {
-                        ChannelChache.clientChannelMap.remove(serial);
-                        if (registerChannel != null && registerChannel.isOpen()){
-                            ProxyMessage proxyMessage = new ProxyMessage();
-                            proxyMessage.setSerial(serial);
-                            proxyMessage.setType(Constants.TYPE_DISCONNECT);
-                            proxyMessage.setData(null);
-                            registerChannel.writeAndFlush(proxyMessage);
-                        }
-                        log.error("client connect proxy error! serial：{}",serial);
-                    }
-                }
-            });
-            try {
-                ChannelChache.clientChannelMap.put(serial,channelFuture.channel());
-                channelFuture.sync();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+    @Override
+    public void stop() {
+        for (ClientProxy proxy : proxies) {
+            Channel register = proxy.registerChannel();
+            if (register != null) {
+                register.close();
             }
         }
+        timer.stop();
+    }
+
+    public void registerConnect(ClientProxy proxy) {
+        Channel current = proxy.registerChannel();
+        if (current != null && current.isOpen()) {
+            return;
+        }
+        bootstrap.connect(config.register().ip().trim(), config.register().port())
+                .addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture future) {
+                        Channel registerChannel = future.channel();
+                        proxy.registerChannel(registerChannel);
+                        if (registerChannel != null && registerChannel.isOpen()) {
+                            registerChannel.config().setOption(ChannelOption.SO_KEEPALIVE, true);
+                            registerChannel.pipeline().addLast(new ProxyMessageDecoder(Constants.MAX_FRAME_LENGTH,
+                                    Constants.LENGTH_FIELD_OFFSET, Constants.LENGTH_FIELD_LENGTH,
+                                    Constants.LENGTH_ADJUSTMENT, Constants.INITIAL_BYTES_TO_STRIP));
+                            registerChannel.pipeline().addLast(new ProxyMessageEncoder());
+                            registerChannel.pipeline().addLast(new IdleStateHandler(0, 0, 60, TimeUnit.SECONDS));
+                            registerChannel.pipeline().addLast(new ClientIdleDataHandler());
+                            registerChannel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, true));
+                            String info = proxy.binding().appIp() + "," + proxy.binding().appPort() + ","
+                                    + proxy.binding().remotePort() + "\r\n";
+                            registerChannel.writeAndFlush(ProxyMessage.register(info.getBytes()));
+                            log.info("client connected register!");
+                        } else {
+                            timer.newTimeout(timeout -> registerConnect(proxy), 10, TimeUnit.SECONDS);
+                            log.error("client connect register error!");
+                        }
+                    }
+                });
+    }
+
+    public void proxyConnect(ClientProxy proxy, long serial) {
+        Channel current = proxy.appChannel();
+        if (current != null && current.isOpen()) {
+            return;
+        }
+        bootstrap.connect(proxy.binding().appIp().trim(), proxy.binding().appPort())
+                .addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture future) {
+                        Channel channel = future.channel();
+                        proxy.appChannel(channel);
+                        Channel registerChannel = proxy.registerChannel();
+                        if (channel != null && channel.isOpen()) {
+                            channel.attr(Constants.CHANNEL_SERIAL).set(serial);
+                            channel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, false));
+                            registry.clientChannel().put(serial, channel);
+                            if (registerChannel != null && registerChannel.isOpen()) {
+                                registerChannel.writeAndFlush(ProxyMessage.connect(serial));
+                            }
+                            log.debug("client connected proxy! serial：{}", serial);
+                        } else {
+                            registry.clientChannel().remove(serial);
+                            if (registerChannel != null && registerChannel.isOpen()) {
+                                registerChannel.writeAndFlush(ProxyMessage.disconnect(serial));
+                            }
+                            log.error("client connect proxy error! serial：{}", serial);
+                        }
+                    }
+                });
     }
 }

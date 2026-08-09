@@ -1,10 +1,11 @@
 package org.lzh.proxy.client.handler;
 
 import org.lzh.proxy.client.Client;
-import org.lzh.proxy.config.ChannelChache;
+import org.lzh.proxy.client.ClientProxy;
 import org.lzh.proxy.config.Constants;
-import org.lzh.proxy.config.GlobalConfig;
 import org.lzh.proxy.protocol.ProxyMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -12,14 +13,20 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.Attribute;
-import lombok.extern.slf4j.Slf4j;
 
-
-@Slf4j
+/**
+ * 客户端数据处理器：注册（控制）通道与应用通道共用。
+ */
 public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
-    private GlobalConfig.ProxyInfo proxyInfo;
-    private Boolean isRegister;
-    public ClientDataHandler(GlobalConfig.ProxyInfo proxyInfo,Boolean isRegister){
+
+    private static final Logger log = LoggerFactory.getLogger(ClientDataHandler.class);
+
+    private final Client client;
+    private final ClientProxy proxyInfo;
+    private final boolean isRegister;
+
+    public ClientDataHandler(Client client, ClientProxy proxyInfo, boolean isRegister) {
+        this.client = client;
         this.proxyInfo = proxyInfo;
         this.isRegister = isRegister;
     }
@@ -28,20 +35,16 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         Channel channel = ctx.channel();
         if (isRegister) {
-            log.warn("服务端连接端口 {} 断连，重连中！", GlobalConfig.getInstance().getRegisterPort());
-            Client.registerConnect(proxyInfo);
-        }else {
+            log.warn("服务端连接端口 {} 断连，重连中！", client.registerPort());
+            client.registerConnect(proxyInfo);
+        } else {
             Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
-            Channel registerChannel = proxyInfo.getRegister();
-            if (registerChannel != null && registerChannel.isOpen()){
-                ProxyMessage proxyMessage = new ProxyMessage();
-                proxyMessage.setType(Constants.TYPE_DISCONNECT);
-                proxyMessage.setSerial(serial.get());
-                proxyMessage.setData(null);
-                registerChannel.writeAndFlush(proxyMessage);
+            Channel registerChannel = proxyInfo.registerChannel();
+            if (registerChannel != null && registerChannel.isOpen()) {
+                registerChannel.writeAndFlush(ProxyMessage.disconnect(serial.get()));
             }
-            ChannelChache.clientChannelMap.remove(serial.get());
-            log.debug("serial: {},代理关闭",serial.get());
+            client.registry().clientChannel().remove(serial.get());
+            log.debug("serial: {},代理关闭", serial.get());
         }
         super.channelInactive(ctx);
     }
@@ -49,46 +52,42 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
         Channel channel = ctx.channel();
-        if (isRegister){
+        if (isRegister) {
             if (msg instanceof ProxyMessage) {
-                handlerRegisterData(ctx, (ProxyMessage)msg);
+                handlerRegisterData(ctx, (ProxyMessage) msg);
             }
-        }else {
+        } else {
             if (msg instanceof ByteBuf) {
-                Channel register = proxyInfo.getRegister();
+                Channel register = proxyInfo.registerChannel();
                 if (register != null && register.isOpen()) {
                     Attribute<Long> serial = channel.attr(Constants.CHANNEL_SERIAL);
-                    ProxyMessage proxyMessage = new ProxyMessage();
-                    proxyMessage.setType(Constants.TYPE_TRANSFER);
-                    proxyMessage.setSerial(serial.get());
-                    ByteBuf byteBuf = (ByteBuf)msg;
+                    ByteBuf byteBuf = (ByteBuf) msg;
                     byte[] bytes = new byte[byteBuf.readableBytes()];
                     byteBuf.readBytes(bytes);
-                    proxyMessage.setData(bytes);
-                    register.writeAndFlush(proxyMessage);
+                    register.writeAndFlush(ProxyMessage.transfer(serial.get(), bytes));
                 }
             }
         }
     }
 
     private void handlerRegisterData(ChannelHandlerContext ctx, ProxyMessage msg) {
-        if (msg.getType() == Constants.TYPE_CONNECT){
-            Client.proxyConnect(proxyInfo, msg.getSerial());
+        if (msg.type() == Constants.TYPE_CONNECT) {
+            client.proxyConnect(proxyInfo, msg.serial());
         }
-        if (msg.getType() == Constants.TYPE_TRANSFER){
-            Channel proxyChannel = ChannelChache.clientChannelMap.get(msg.getSerial());
+        if (msg.type() == Constants.TYPE_TRANSFER) {
+            Channel proxyChannel = client.registry().clientChannel().get(msg.serial());
             if (proxyChannel != null && proxyChannel.isOpen()) {
-                proxyChannel.writeAndFlush(Unpooled.wrappedBuffer(msg.getData()));
+                proxyChannel.writeAndFlush(Unpooled.wrappedBuffer(msg.data()));
             }
         }
-        if (msg.getType() == Constants.TYPE_DISCONNECT){
-            Channel proxyChannel = ChannelChache.clientChannelMap.get(msg.getSerial());
-            if (proxyChannel != null && proxyChannel.isOpen()){
+        if (msg.type() == Constants.TYPE_DISCONNECT) {
+            Channel proxyChannel = client.registry().clientChannel().get(msg.serial());
+            if (proxyChannel != null && proxyChannel.isOpen()) {
                 proxyChannel.close();
             }
         }
-        if (msg.getType() == Constants.TYPE_HEART_BEET_PONG){
-            log.debug("{} pong",ctx.channel().remoteAddress().toString());
+        if (msg.type() == Constants.TYPE_HEART_BEET_PONG) {
+            log.debug("{} pong", ctx.channel().remoteAddress());
         }
     }
 
