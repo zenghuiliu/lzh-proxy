@@ -105,7 +105,11 @@ try (LzhProxy.ProxyInstance client = LzhProxy.client().config(clientConfig).star
 
 ### 发布 / Publishing
 
-- **Maven Central**：本地执行 `mvn deploy -Prelease`（需在 `~/.m2/settings.xml` 配置 OSSRH 账号与 GPG 密钥）；或推送 `v*` 标签触发 CI 发布（需在仓库 Secrets 配置 `OSSRH_USERNAME` / `OSSRH_PASSWORD` / `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE`）。
+- **Maven Central（central.sonatype.com Portal）**：
+  1. 注册账号并验证 `io.github.zenghuiliu` 命名空间所有权（GitHub 验证）。
+  2. 生成 GPG 密钥对并上传公钥到 keyserver。
+  3. 在 `central.sonatype.com` 生成 **User Token**，写入 `~/.m2/settings.xml` 的 `<server><id>central</id>`，并将 GPG 指纹/口令写入同一文件的 `gpg` profile。
+  4. 本地执行 `mvn deploy -Prelease`（插件为 `central-publishing-maven-plugin`，上传到 Portal 后需在页面点 Publish）；或推送 `v*` 标签触发 CI 发布（仓库 Secrets 配置 `CENTRAL_USERNAME` / `CENTRAL_PASSWORD` / `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE`）。
 - **JitPack**：推送到 GitHub 后即可通过 tag/commit 直接依赖，零配置（`.jitpack.yml` 指定 JDK 21）。
 
 ## 服务端配置 / Server Config（application-server.yml）

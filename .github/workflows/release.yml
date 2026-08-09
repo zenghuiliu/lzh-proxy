@@ -15,15 +15,18 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          # 发布 Central 所需（仓库 Settings -> Secrets 配置）：
-          server-id: ossrh
-          server-username: ${{ secrets.OSSRH_USERNAME }}
-          server-password: ${{ secrets.OSSRH_PASSWORD }}
+          # 发布 Central Portal 所需（仓库 Settings -> Secrets 配置）：
+          #   CENTRAL_USERNAME / CENTRAL_PASSWORD  = central.sonatype.com 的 User Token
+          #   GPG_PRIVATE_KEY                      = 导出的私钥（armored）
+          #   GPG_PASSPHRASE                       = GPG 密钥口令
+          server-id: central
+          server-username: ${{ secrets.CENTRAL_USERNAME }}
+          server-password: ${{ secrets.CENTRAL_PASSWORD }}
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Build & test & integration-test
         run: mvn -B -ntp verify
 
-      - name: Publish to Maven Central (OSSRH staging)
+      - name: Publish to Maven Central Portal
         run: mvn -B -ntp deploy -Prelease -DskipTests
