@@ -1,0 +1,3 @@
+# JitPack 构建配置：指定 JDK 21
+jdk:
+  - openjdk21

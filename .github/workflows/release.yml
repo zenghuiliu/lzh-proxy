@@ -1,0 +1,29 @@
+name: release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  publish-central:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          # 发布 Central 所需（仓库 Settings -> Secrets 配置）：
+          server-id: ossrh
+          server-username: ${{ secrets.OSSRH_USERNAME }}
+          server-password: ${{ secrets.OSSRH_PASSWORD }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Build & test & integration-test
+        run: mvn -B -ntp verify
+
+      - name: Publish to Maven Central (OSSRH staging)
+        run: mvn -B -ntp deploy -Prelease -DskipTests

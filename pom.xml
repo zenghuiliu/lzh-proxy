@@ -4,9 +4,42 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.lzh.proxy</groupId>
+    <groupId>io.github.zenghuiliu</groupId>
     <artifactId>lzh-proxy</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>lzh-proxy</name>
+    <description>Netty-based TCP proxy with SSH jump-host tunneling. Embeddable via the LzhProxy API or runnable standalone.</description>
+    <url>https://github.com/zenghuiliu/lzh-proxy</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>zenghuiliu</id>
+            <name>lzh</name>
+            <url>https://github.com/zenghuiliu</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/zenghuiliu/lzh-proxy.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/zenghuiliu/lzh-proxy.git</developerConnection>
+        <url>https://github.com/zenghuiliu/lzh-proxy</url>
+        <tag>v1.0.0</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/zenghuiliu/lzh-proxy/issues</url>
+    </issueManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -57,6 +90,7 @@
     </dependencies>
 
     <build>
+        <!-- 默认 slim jar：target/lzh-proxy.jar（库工件） -->
         <finalName>${project.artifactId}</finalName>
         <plugins>
             <plugin>
@@ -93,12 +127,13 @@
                 </executions>
             </plugin>
 
-            <!-- 打包jar文件时，配置manifest文件，加入lib包的jar依赖 -->
+            <!-- 独立可运行 fat jar：target/lzh-proxy-jar-with-dependencies.jar（appendAssemblyId=true，
+                 避免覆盖 slim 库 jar） -->
             <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.7.1</version>
                 <configuration>
-                    <appendAssemblyId>false</appendAssemblyId>
+                    <appendAssemblyId>true</appendAssemblyId>
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
@@ -118,15 +153,116 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- 发布所需 sources / javadoc 附加工件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.6.3</version>
+                <configuration>
+                    <release>21</release>
+                    <doclint>none</doclint>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 许可证头检查（verify 阶段） -->
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>4.5</version>
+                <configuration>
+                    <header>LICENSE_HEADER</header>
+                    <properties>
+                        <owner>lzh</owner>
+                        <year>2023-2026</year>
+                    </properties>
+                    <includes>
+                        <include>src/**/*.java</include>
+                    </includes>
+                    <strictCheck>true</strictCheck>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
 
-    <!-- 阿里云maven仓库 -->
+    <!-- Maven Central (OSSRH) 发布仓库 -->
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://s01.oss.sonatype.org/content/repositories/snapshots/</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
+
+    <profiles>
+        <!-- 发布 Central 专用：GPG 签名 + nexus-staging 部署。
+             使用：mvn deploy -Prelease（需在 ~/.m2/settings.xml 配置 ossrh 账号与 GPG 密钥） -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.4</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.plugins</groupId>
+                        <artifactId>nexus-staging-maven-plugin</artifactId>
+                        <version>1.6.13</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <serverId>ossrh</serverId>
+                            <nexusUrl>https://s01.oss.sonatype.org/</nexusUrl>
+                            <autoReleaseAfterClose>false</autoReleaseAfterClose>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+    <!-- 阿里云maven仓库（国内加速） -->
     <repositories>
         <repository>
             <id>nexus-aliyun</id>

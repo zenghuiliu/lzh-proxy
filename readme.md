@@ -37,10 +37,10 @@ A Netty-based TCP proxy supporting TCP data forwarding and SSH jump-host tunneli
 mvn verify
 
 # 服务端 · server（默认 application-server.yml，由 -profile=server 选择）
-java -jar target/lzh-proxy.jar -profile=server
+java -jar target/lzh-proxy-jar-with-dependencies.jar -profile=server
 
 # 客户端 · client（默认 application.yml）
-java -jar target/lzh-proxy.jar
+java -jar target/lzh-proxy-jar-with-dependencies.jar
 
 # 可选命令行参数 · optional CLI args
 #   -profile=<name>      选择 application-<name>.yml · select application-<name>.yml
@@ -48,8 +48,65 @@ java -jar target/lzh-proxy.jar
 #   --ssh.password.<id>=<value>   命令行覆盖 SSH 密码 · override SSH password
 ```
 
-> 进程通过关闭钩子优雅停机（先停 SSH、解绑监听、关闭隧道、再停事件循环）。
-> Graceful shutdown via JVM shutdown hook (stop SSH → unbind listeners → close tunnels → stop event loops).
+> 打包产物 · artifacts：`target/lzh-proxy.jar` 为库用 slim jar；`target/lzh-proxy-jar-with-dependencies.jar` 为独立可运行 fat jar。
+> Process exits gracefully via JVM shutdown hook (stop SSH → unbind listeners → close tunnels → stop event loops).
+
+## 作为依赖使用 / Use as a Dependency
+
+### Maven Central（推荐 · recommended）
+
+```xml
+<dependency>
+    <groupId>io.github.zenghuiliu</groupId>
+    <artifactId>lzh-proxy</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+### JitPack（基于 GitHub 仓库 · built from the GitHub repo）
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+<dependency>
+    <groupId>com.github.zenghuiliu</groupId>
+    <artifactId>lzh-proxy</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+### 编程方式嵌入 / Embed programmatically
+
+```java
+// 方式一：从 YAML profile 加载配置并启动 · load from a YAML profile and start
+try (LzhProxy.ProxyInstance server = LzhProxy.server().configFile("server").start()) {
+    // ... 你的业务代码 · your code
+}
+
+// 方式二：程序化构建 AppConfig · build AppConfig programmatically
+AppConfig clientConfig = new AppConfig(
+        Role.CLIENT,
+        new RegisterConfig("1.2.3.4", 7000),
+        List.of(),
+        List.of(new ProxyBinding("127.0.0.1", 7002, 7001)),
+        List.of(),
+        new SecurityConfig(SecurityConfig.HostKeyPolicy.TOFU_KNOWN_HOSTS, Path.of(".lzh-proxy", "known_hosts")),
+        new ManagementConfig(false, 0));
+try (LzhProxy.ProxyInstance client = LzhProxy.client().config(clientConfig).start()) {
+    // ...
+}
+```
+
+代理组件在后台守护线程运行，`stop()`/`close()` 触发有序优雅停机。完整用法见 Javadoc 与 `LzhProxyIT`。
+
+### 发布 / Publishing
+
+- **Maven Central**：本地执行 `mvn deploy -Prelease`（需在 `~/.m2/settings.xml` 配置 OSSRH 账号与 GPG 密钥）；或推送 `v*` 标签触发 CI 发布（需在仓库 Secrets 配置 `OSSRH_USERNAME` / `OSSRH_PASSWORD` / `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE`）。
+- **JitPack**：推送到 GitHub 后即可通过 tag/commit 直接依赖，零配置（`.jitpack.yml` 指定 JDK 21）。
 
 ## 服务端配置 / Server Config（application-server.yml）
 
