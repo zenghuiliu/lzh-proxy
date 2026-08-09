@@ -154,11 +154,13 @@
                 </executions>
             </plugin>
 
-            <!-- Maven Central（central.sonatype.com Portal）发布：mvn deploy -Prelease -->
+            <!-- Maven Central（central.sonatype.com Portal）发布：mvn deploy -Prelease
+                 0.5.0 无法解析 Portal 新增的 "warnings" 响应字段（UnrecognizedPropertyException），
+                 已升级到 0.11.0 -->
             <plugin>
                 <groupId>org.sonatype.central</groupId>
                 <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.5.0</version>
+                <version>0.11.0</version>
                 <extensions>true</extensions>
                 <configuration>
                     <publishingServerId>central</publishingServerId>
