@@ -10,23 +10,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
-          # 发布 Central Portal 所需（仓库 Settings -> Secrets 配置）：
+          # Maven Central 发布凭据（仓库 Settings -> Secrets 配置）：
           #   CENTRAL_USERNAME / CENTRAL_PASSWORD  = central.sonatype.com 的 User Token
           #   GPG_PRIVATE_KEY                      = 导出的私钥（armored）
           #   GPG_PASSPHRASE                       = GPG 密钥口令
           server-id: central
-          server-username: ${{ secrets.CENTRAL_USERNAME }}
-          server-password: ${{ secrets.CENTRAL_PASSWORD }}
+          server-username-env-var: MAVEN_USERNAME
+          server-password-env-var: MAVEN_CENTRAL_TOKEN
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          gpg-passphrase-env-var: MAVEN_GPG_PASSPHRASE
 
       - name: Build & test & integration-test
         run: mvn -B -ntp verify
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Publish GPG public key to keyserver
         # Central 校验签名需要公钥在公共 keyserver 上（幂等，可重复执行）
@@ -37,3 +39,7 @@ jobs:
 
       - name: Publish to Maven Central Portal
         run: mvn -B -ntp deploy -Prelease -DskipTests
+        env:
+          MAVEN_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_TOKEN: ${{ secrets.CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
