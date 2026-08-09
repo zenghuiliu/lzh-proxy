@@ -28,5 +28,12 @@ jobs:
       - name: Build & test & integration-test
         run: mvn -B -ntp verify
 
+      - name: Publish GPG public key to keyserver
+        # Central 校验签名需要公钥在公共 keyserver 上（幂等，可重复执行）
+        run: |
+          FP=$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1=="fpr"{print $10; exit}')
+          echo "sending public key ${FP} to keyserver.ubuntu.com"
+          gpg --batch --keyserver keyserver.ubuntu.com --send-keys "$FP"
+
       - name: Publish to Maven Central Portal
         run: mvn -B -ntp deploy -Prelease -DskipTests
