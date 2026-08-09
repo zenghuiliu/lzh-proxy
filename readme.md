@@ -118,7 +118,16 @@ proxyInfos:
 
 - **控制通道**：客户端向服务端注册的长连接，承载注册、心跳与按序列号关联的数据帧。
 - **线协议**：`[4字节长度][1字节type][8字节serial][payload]`，服务端/客户端两侧保持逐字节兼容。
-- **模块**：`config`（不可变配置+校验）、`lifecycle`/`core`（组合根+生命周期）、`protocol`（编解码）、`forward`（隧道注册表/转发/背压）、`tunnel/ssh`（MINA SSHD 状态机）、`management`（指标+管理端点）。
+
+  | 消息类型 | 值 | 用途 |
+  |---------|-----|------|
+  | `CONNECT` | 0x01 | 服务端告知客户端建立到应用的连接 |
+  | `DISCONNECT` | 0x02 | 通知对端关闭某序列号隧道 |
+  | `TRANSFER` | 0x03 | 隧道数据传输 |
+  | `REGISTER` | 0x05 | 客户端注册（payload 为 `appIp,appPort,remotePort\r\n`） |
+  | `HEARTBEAT_PING` / `HEARTBEAT_PONG` | 0x06 / 0x07 | 控制通道心跳 |
+
+- **模块**：`config`（不可变配置+校验）、`lifecycle`/`core`（组合根+生命周期）、`protocol`（消息类型+编解码）、`control`（控制通道处理器+注册协议）、`forward`（隧道注册表/转发/背压）、`tunnel/ssh`（MINA SSHD 状态机）、`management`（指标+管理端点）。
 
 ## 测试
 
@@ -126,7 +135,11 @@ proxyInfos:
 mvn verify
 ```
 
-- 单元测试（surefire）：配置加载与校验、线协议 golden-bytes 互操作与畸形帧健壮性、重连退避策略。
+- 单元测试（surefire，25 个）：
+  - `ProxyConfigLoaderTest`：配置加载与校验（缺字段/重复端口/未知 sshId/双认证方式）、环境变量与 CLI 密钥覆盖。
+  - `ProxyMessageCodecTest`：线协议 golden-bytes 逐字节互操作、编解码往返、畸形/超长帧拒绝（绝不 `NegativeArraySizeException`）。
+  - `RegisterProtocolTest`：注册报文编解码与非法输入拒绝。
+  - `ReconnectPolicyTest`：退避延迟区间、封顶、抖动边界。
 - 集成测试（failsafe，`SshReconnectIT`）：嵌入式 MINA SSHD 服务器上建立本地转发，回显验证；**停止并同端口重启 SSH 服务器**，断言自动重连 + 转发重放后回显恢复。
 
 ## 配置校验规则
