@@ -84,10 +84,13 @@ class LzhProxyIT {
                 new SecurityConfig(SecurityConfig.HostKeyPolicy.ACCEPT_ALL, Path.of("target", "known_hosts")),
                 new ManagementConfig(false, 0));
 
-        try (LzhProxy.ProxyInstance server = LzhProxy.server().config(serverConfig).start();
-                LzhProxy.ProxyInstance client = LzhProxy.client().config(clientConfig).start()) {
+        // 先启动服务端并确认 register 监听就绪，再启动客户端，
+        // 避免客户端首次注册连接竞态（失败后要 10s 才重试，超出等待窗口）
+        try (LzhProxy.ProxyInstance server = LzhProxy.server().config(serverConfig).start()) {
+            awaitTrue(10_000, () -> canConnect(registerPort), "注册端口未就绪");
+            try (LzhProxy.ProxyInstance client = LzhProxy.client().config(clientConfig).start()) {
 
-            awaitTrue(15_000, () -> canConnect(remotePort), "代理端口未就绪");
+                awaitTrue(20_000, () -> canConnect(remotePort), "代理端口未就绪");
 
             byte[] payload = "hello-from-embed".getBytes(StandardCharsets.UTF_8);
             try (Socket s = new Socket("127.0.0.1", remotePort)) {
@@ -108,6 +111,7 @@ class LzhProxyIT {
                 assertThat(off).isEqualTo(payload.length);
                 assertThat(new String(received, 0, off, StandardCharsets.UTF_8))
                         .isEqualTo(new String(payload, StandardCharsets.UTF_8));
+            }
             }
         } finally {
             echo.close();

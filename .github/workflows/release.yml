@@ -45,8 +45,10 @@ jobs:
           printf "allow-loopback-pinentry\n" >> ~/.gnupg/gpg-agent.conf
           gpgconf --kill gpg-agent || true
 
-      - name: Build & test & integration-test
-        run: mvn -B -ntp verify
+      - name: Build & unit test
+        # release 只跑单元测试（集成测试在 build.yml 的 push 上全量跑，
+        # 避免时序型 flaky 阻塞发布）
+        run: mvn -B -ntp test
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
