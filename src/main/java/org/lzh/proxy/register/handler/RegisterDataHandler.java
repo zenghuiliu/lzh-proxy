@@ -4,6 +4,7 @@ import org.lzh.proxy.config.Constants;
 import org.lzh.proxy.config.EndpointType;
 import org.lzh.proxy.config.ServerEndpoint;
 import org.lzh.proxy.forward.TunnelRegistry;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.protocol.ProxyMessage;
 import org.lzh.proxy.server.Server;
 import org.slf4j.Logger;
@@ -24,10 +25,12 @@ public class RegisterDataHandler extends SimpleChannelInboundHandler<ProxyMessag
 
     private final TunnelRegistry registry;
     private final Server server;
+    private final MetricsRegistry metrics;
 
-    public RegisterDataHandler(TunnelRegistry registry, Server server) {
+    public RegisterDataHandler(TunnelRegistry registry, Server server, MetricsRegistry metrics) {
         this.registry = registry;
         this.server = server;
+        this.metrics = metrics;
     }
 
     @Override
@@ -43,6 +46,9 @@ public class RegisterDataHandler extends SimpleChannelInboundHandler<ProxyMessag
         } else if (msg.type() == Constants.TYPE_TRANSFER) {
             Channel sndChannel = registry.serverChannel().get(msg.serial());
             if (sndChannel != null && sndChannel.isOpen()) {
+                if (msg.data() != null) {
+                    metrics.bytesC2s(msg.data().length);
+                }
                 sndChannel.writeAndFlush(Unpooled.wrappedBuffer(msg.data()));
             }
         } else if (msg.type() == Constants.TYPE_CONNECT) {
@@ -63,6 +69,7 @@ public class RegisterDataHandler extends SimpleChannelInboundHandler<ProxyMessag
             reqPort = Integer.valueOf(info[2].trim());
         } catch (Exception e) {
             log.info("注册信息不合法！msg：{}", (Object) info, e);
+            metrics.registerReject();
         }
         if (reqPort == null || info.length < 3) {
             return;

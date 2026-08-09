@@ -7,6 +7,8 @@ import org.lzh.proxy.core.SerialGenerator;
 import org.lzh.proxy.forward.TunnelRegistry;
 import org.lzh.proxy.lifecycle.Lifecycle;
 import org.lzh.proxy.lifecycle.LifecycleRegistry;
+import org.lzh.proxy.management.AdminHttpServer;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.register.Register;
 import org.lzh.proxy.server.Server;
 import org.lzh.proxy.tunnel.ssh.SshSessionManager;
@@ -29,16 +31,20 @@ public class ServerLauncher implements Lifecycle {
         Schedulers schedulers = new Schedulers();
         TunnelRegistry tunnelRegistry = new TunnelRegistry();
         SerialGenerator serialGenerator = new SerialGenerator();
+        MetricsRegistry metrics = new MetricsRegistry();
 
-        SshSessionManager sshManager = new SshSessionManager(config, schedulers.sshKeepAlive());
-        Server server = new Server(config, netty.boss(), netty.worker(), tunnelRegistry, serialGenerator, sshManager);
-        Register register = new Register(config, netty.boss(), netty.worker(), tunnelRegistry, server);
+        SshSessionManager sshManager = new SshSessionManager(config, schedulers.sshKeepAlive(), metrics);
+        Server server = new Server(config, netty.boss(), netty.worker(), tunnelRegistry, serialGenerator, sshManager,
+                metrics);
+        Register register = new Register(config, netty.boss(), netty.worker(), tunnelRegistry, server, metrics);
+        AdminHttpServer admin = new AdminHttpServer(config, metrics, tunnelRegistry, sshManager);
 
         registry.register(netty)
                 .register(schedulers)
                 .register(sshManager)
                 .register(server)
-                .register(register);
+                .register(register)
+                .register(admin);
         registry.start();
     }
 

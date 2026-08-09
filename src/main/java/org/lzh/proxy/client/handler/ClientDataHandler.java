@@ -3,6 +3,7 @@ package org.lzh.proxy.client.handler;
 import org.lzh.proxy.client.Client;
 import org.lzh.proxy.client.ClientProxy;
 import org.lzh.proxy.config.Constants;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.protocol.ProxyMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,17 +25,20 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
     private final Client client;
     private final ClientProxy proxyInfo;
     private final boolean isRegister;
+    private final MetricsRegistry metrics;
 
-    public ClientDataHandler(Client client, ClientProxy proxyInfo, boolean isRegister) {
+    public ClientDataHandler(Client client, ClientProxy proxyInfo, boolean isRegister, MetricsRegistry metrics) {
         this.client = client;
         this.proxyInfo = proxyInfo;
         this.isRegister = isRegister;
+        this.metrics = metrics;
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         Channel channel = ctx.channel();
         if (isRegister) {
+            metrics.controlReconnect();
             log.warn("服务端连接端口 {} 断连，重连中！", client.registerPort());
             client.registerConnect(proxyInfo);
         } else {
@@ -44,6 +48,7 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
                 registerChannel.writeAndFlush(ProxyMessage.disconnect(serial.get()));
             }
             client.registry().clientChannel().remove(serial.get());
+            metrics.tunnelClosed();
             log.debug("serial: {},代理关闭", serial.get());
         }
         super.channelInactive(ctx);
@@ -64,6 +69,7 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
                     ByteBuf byteBuf = (ByteBuf) msg;
                     byte[] bytes = new byte[byteBuf.readableBytes()];
                     byteBuf.readBytes(bytes);
+                    metrics.bytesC2s(bytes.length);
                     register.writeAndFlush(ProxyMessage.transfer(serial.get(), bytes));
                 }
             }
@@ -77,6 +83,9 @@ public class ClientDataHandler extends SimpleChannelInboundHandler<Object> {
         if (msg.type() == Constants.TYPE_TRANSFER) {
             Channel proxyChannel = client.registry().clientChannel().get(msg.serial());
             if (proxyChannel != null && proxyChannel.isOpen()) {
+                if (msg.data() != null) {
+                    metrics.bytesS2c(msg.data().length);
+                }
                 proxyChannel.writeAndFlush(Unpooled.wrappedBuffer(msg.data()));
             }
         }

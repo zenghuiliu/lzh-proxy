@@ -1,9 +1,14 @@
-  isServer: false
-  # 服务端注册ip以及port
-  registerIp: 127.0.0.1
-  registerPort: 7000
-  # 客户端代理服务列表
-  proxyInfos:
-    - ip: 127.0.0.1
-      port: 7002
-      remotePort: 7001
+isServer: false
+# 服务端注册ip以及port
+registerIp: 127.0.0.1
+registerPort: 7000
+# 客户端代理服务列表
+proxyInfos:
+  - ip: 127.0.0.1
+    port: 7002
+    remotePort: 7001
+
+# 管理端点（可选，默认关闭；仅回环监听）
+# management:
+#   enabled: true
+#   port: 7003

@@ -5,11 +5,20 @@ registerPort: 7000
 # ssh连接信息
 sshInfos:
   - id: test
-    # ssh登录信息
+    # ssh登录信息（密码认证；密钥认证配置 privateKeyPath）
     ip: 127.0.0.1
     port: 22
     username: root
     password: root
+    # 可选：从环境变量取密码（优先于 password）
+    # passwordEnv: LZH_PROXY_SSH_TEST_PASSWORD
+    # 可选：密钥认证
+    # privateKeyPath: C:\Users\lzh\.ssh\id_rsa
+    # passphrase: 密钥口令（可空）
+    # 可选：连接超时（毫秒）/保活间隔（秒）/保活失败次数
+    # connectTimeoutMs: 10000
+    # keepAliveIntervalSec: 30
+    # keepAliveCountMax: 3
 
 # 服务端暴露端口列表
 serverInfos:
@@ -23,3 +32,14 @@ serverInfos:
     forwardIp: 127.0.0.1
     forwardPort: 8848
 
+# 管理端点（可选，默认关闭；仅回环监听）
+management:
+  enabled: true
+  port: 7003
+
+# 安全（可选）
+# security:
+#   # 主机密钥校验：tofu_known_hosts（默认）/ strict / accept_all
+#   hostKeyPolicy: tofu_known_hosts
+#   # known_hosts 文件路径（tofu/strict 时使用，默认 .lzh-proxy/known_hosts）
+#   knownHostsPath: .lzh-proxy/known_hosts

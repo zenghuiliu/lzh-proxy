@@ -22,6 +22,7 @@ import org.apache.sshd.common.util.security.SecurityUtils;
 import org.lzh.proxy.config.ServerEndpoint;
 import org.lzh.proxy.config.SshAuthConfig;
 import org.lzh.proxy.config.SshEndpointConfig;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +50,7 @@ public class SshSession {
     private final ScheduledExecutorService scheduler;
     private final ReconnectPolicy policy;
     private final LocalForwarder forwarder;
+    private final MetricsRegistry metrics;
 
     /** 本地端口 -> 转发配置（重连后重放依据）。 */
     private final ConcurrentHashMap<Integer, ServerEndpoint> forwards = new ConcurrentHashMap<>();
@@ -65,12 +67,13 @@ public class SshSession {
     private ScheduledFuture<?> reconnectFuture;
 
     public SshSession(SshEndpointConfig config, SshClient client, ScheduledExecutorService scheduler,
-                      ReconnectPolicy policy, LocalForwarder forwarder) {
+                      ReconnectPolicy policy, LocalForwarder forwarder, MetricsRegistry metrics) {
         this.config = config;
         this.client = client;
         this.scheduler = scheduler;
         this.policy = policy;
         this.forwarder = forwarder;
+        this.metrics = metrics;
     }
 
     public String id() {
@@ -191,6 +194,7 @@ public class SshSession {
                 }
             }
             log.error("ssh[{}] 致命错误[{}]，停止自动重连", config.id(), kind);
+            metrics.sshReconnectFailure();
             return;
         }
         scheduleReconnect();
@@ -203,6 +207,7 @@ public class SshSession {
             }
             state = SshState.BACKOFF;
             attempt++;
+            metrics.sshReconnectAttempt();
             long delay = policy.nextDelayMs(attempt);
             reconnectScheduled = true;
             reconnectFuture = scheduler.schedule(this::connect, delay, TimeUnit.MILLISECONDS);

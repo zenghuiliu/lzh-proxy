@@ -3,6 +3,7 @@ package org.lzh.proxy.server.handler;
 import org.lzh.proxy.config.Constants;
 import org.lzh.proxy.core.SerialGenerator;
 import org.lzh.proxy.forward.TunnelRegistry;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.protocol.ProxyMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,10 +26,12 @@ public class ServerDataHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     private final TunnelRegistry registry;
     private final SerialGenerator serial;
+    private final MetricsRegistry metrics;
 
-    public ServerDataHandler(TunnelRegistry registry, SerialGenerator serial) {
+    public ServerDataHandler(TunnelRegistry registry, SerialGenerator serial, MetricsRegistry metrics) {
         this.registry = registry;
         this.serial = serial;
+        this.metrics = metrics;
     }
 
     @Override
@@ -39,6 +42,7 @@ public class ServerDataHandler extends SimpleChannelInboundHandler<ByteBuf> {
         Attribute<Long> serialAttr = channel.attr(Constants.CHANNEL_SERIAL);
         serialAttr.set(serial.next());
         registry.serverChannel().put(serialAttr.get(), channel);
+        metrics.tunnelOpened();
         log.info("channel is active :{}", channel);
         sendMsg(channel, Constants.TYPE_CONNECT, null);
         super.channelActive(ctx);
@@ -47,6 +51,7 @@ public class ServerDataHandler extends SimpleChannelInboundHandler<ByteBuf> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
         Channel reqChannel = ctx.channel();
+        metrics.bytesS2c(msg.readableBytes());
         sendMsg(reqChannel, Constants.TYPE_TRANSFER, msg);
     }
 
@@ -59,6 +64,7 @@ public class ServerDataHandler extends SimpleChannelInboundHandler<ByteBuf> {
         }
         Attribute<Long> serialAttr = channel.attr(Constants.CHANNEL_SERIAL);
         registry.serverChannel().remove(serialAttr.get());
+        metrics.tunnelClosed();
         log.debug("channel is closed:{}", channel);
         super.channelInactive(ctx);
     }

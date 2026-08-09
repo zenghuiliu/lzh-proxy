@@ -2,8 +2,10 @@ package org.lzh.proxy.register;
 
 import org.lzh.proxy.config.AppConfig;
 import org.lzh.proxy.config.Constants;
+import org.lzh.proxy.forward.FlowControlHandler;
 import org.lzh.proxy.forward.TunnelRegistry;
 import org.lzh.proxy.lifecycle.Lifecycle;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.protocol.ProxyMessageDecoder;
 import org.lzh.proxy.protocol.ProxyMessageEncoder;
 import org.lzh.proxy.register.handler.RegisterDataHandler;
@@ -19,6 +21,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
@@ -34,16 +37,18 @@ public class Register implements Lifecycle {
     private final EventLoopGroup workGroup;
     private final TunnelRegistry registry;
     private final Server server;
+    private final MetricsRegistry metrics;
     private final ServerBootstrap serverBootstrap = new ServerBootstrap();
     private volatile Channel serverChannel;
 
     public Register(AppConfig config, EventLoopGroup bossGroup, EventLoopGroup workGroup, TunnelRegistry registry,
-                    Server server) {
+                    Server server, MetricsRegistry metrics) {
         this.config = config;
         this.bossGroup = bossGroup;
         this.workGroup = workGroup;
         this.registry = registry;
         this.server = server;
+        this.metrics = metrics;
     }
 
     @Override
@@ -59,10 +64,13 @@ public class Register implements Lifecycle {
             @Override
             protected void initChannel(SocketChannel ch) {
                 ChannelPipeline pipeline = ch.pipeline();
+                // 控制通道共享多隧道：以写缓冲水位限制总缓冲，并按写可控性联动叶子读暂停
+                ch.config().setWriteBufferWaterMark(new WriteBufferWaterMark(64 * 1024, 256 * 1024));
                 pipeline.addLast(new ProxyMessageDecoder(Constants.MAX_FRAME_LENGTH, Constants.LENGTH_FIELD_OFFSET,
                         Constants.LENGTH_FIELD_LENGTH, Constants.LENGTH_ADJUSTMENT, Constants.INITIAL_BYTES_TO_STRIP));
                 pipeline.addLast(new ProxyMessageEncoder());
-                pipeline.addLast(new RegisterDataHandler(registry, server));
+                pipeline.addLast(new FlowControlHandler(() -> registry.serverChannel().values()));
+                pipeline.addLast(new RegisterDataHandler(registry, server, metrics));
             }
         });
 

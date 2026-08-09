@@ -9,8 +9,10 @@ import org.lzh.proxy.config.Constants;
 import org.lzh.proxy.config.ProxyBinding;
 import org.lzh.proxy.client.handler.ClientDataHandler;
 import org.lzh.proxy.client.handler.ClientIdleDataHandler;
+import org.lzh.proxy.forward.FlowControlHandler;
 import org.lzh.proxy.forward.TunnelRegistry;
 import org.lzh.proxy.lifecycle.Lifecycle;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.lzh.proxy.protocol.ProxyMessage;
 import org.lzh.proxy.protocol.ProxyMessageDecoder;
 import org.lzh.proxy.protocol.ProxyMessageEncoder;
@@ -24,6 +26,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -41,14 +44,16 @@ public class Client implements Lifecycle {
     private final AppConfig config;
     private final EventLoopGroup eventLoop;
     private final TunnelRegistry registry;
+    private final MetricsRegistry metrics;
     private final Bootstrap bootstrap = new Bootstrap();
     private final HashedWheelTimer timer = new HashedWheelTimer();
     private final List<ClientProxy> proxies = new ArrayList<>();
 
-    public Client(AppConfig config, EventLoopGroup eventLoop, TunnelRegistry registry) {
+    public Client(AppConfig config, EventLoopGroup eventLoop, TunnelRegistry registry, MetricsRegistry metrics) {
         this.config = config;
         this.eventLoop = eventLoop;
         this.registry = registry;
+        this.metrics = metrics;
     }
 
     public TunnelRegistry registry() {
@@ -101,13 +106,15 @@ public class Client implements Lifecycle {
                         proxy.registerChannel(registerChannel);
                         if (registerChannel != null && registerChannel.isOpen()) {
                             registerChannel.config().setOption(ChannelOption.SO_KEEPALIVE, true);
+                            registerChannel.config().setWriteBufferWaterMark(new WriteBufferWaterMark(64 * 1024, 256 * 1024));
                             registerChannel.pipeline().addLast(new ProxyMessageDecoder(Constants.MAX_FRAME_LENGTH,
                                     Constants.LENGTH_FIELD_OFFSET, Constants.LENGTH_FIELD_LENGTH,
                                     Constants.LENGTH_ADJUSTMENT, Constants.INITIAL_BYTES_TO_STRIP));
                             registerChannel.pipeline().addLast(new ProxyMessageEncoder());
+                            registerChannel.pipeline().addLast(new FlowControlHandler(() -> registry.clientChannel().values()));
                             registerChannel.pipeline().addLast(new IdleStateHandler(0, 0, 60, TimeUnit.SECONDS));
                             registerChannel.pipeline().addLast(new ClientIdleDataHandler());
-                            registerChannel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, true));
+                            registerChannel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, true, metrics));
                             String info = proxy.binding().appIp() + "," + proxy.binding().appPort() + ","
                                     + proxy.binding().remotePort() + "\r\n";
                             registerChannel.writeAndFlush(ProxyMessage.register(info.getBytes()));
@@ -134,8 +141,9 @@ public class Client implements Lifecycle {
                         Channel registerChannel = proxy.registerChannel();
                         if (channel != null && channel.isOpen()) {
                             channel.attr(Constants.CHANNEL_SERIAL).set(serial);
-                            channel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, false));
+                            channel.pipeline().addLast(new ClientDataHandler(Client.this, proxy, false, metrics));
                             registry.clientChannel().put(serial, channel);
+                            metrics.tunnelOpened();
                             if (registerChannel != null && registerChannel.isOpen()) {
                                 registerChannel.writeAndFlush(ProxyMessage.connect(serial));
                             }

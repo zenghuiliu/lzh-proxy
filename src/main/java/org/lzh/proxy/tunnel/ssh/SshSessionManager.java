@@ -8,6 +8,7 @@ import org.lzh.proxy.config.AppConfig;
 import org.lzh.proxy.config.ServerEndpoint;
 import org.lzh.proxy.config.SshEndpointConfig;
 import org.lzh.proxy.lifecycle.Lifecycle;
+import org.lzh.proxy.management.MetricsRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,12 +24,14 @@ public class SshSessionManager implements Lifecycle {
     private final ScheduledExecutorService scheduler;
     private final ReconnectPolicy policy;
     private final LocalForwarder forwarder;
+    private final MetricsRegistry metrics;
     private final SshClient client;
     private final ConcurrentHashMap<String, SshSession> sessions = new ConcurrentHashMap<>();
 
-    public SshSessionManager(AppConfig config, ScheduledExecutorService scheduler) {
+    public SshSessionManager(AppConfig config, ScheduledExecutorService scheduler, MetricsRegistry metrics) {
         this.config = config;
         this.scheduler = scheduler;
+        this.metrics = metrics;
         this.policy = ReconnectPolicy.defaults();
         this.forwarder = new MinaLocalForwarder();
         this.client = SshClient.setUpDefaultClient();
@@ -39,7 +42,7 @@ public class SshSessionManager implements Lifecycle {
     public void start() {
         client.start();
         for (SshEndpointConfig ssh : config.sshEndpoints()) {
-            SshSession session = new SshSession(ssh, client, scheduler, policy, forwarder);
+            SshSession session = new SshSession(ssh, client, scheduler, policy, forwarder, metrics);
             sessions.put(ssh.id(), session);
             // 异步发起连接，避免阻塞服务端整体启动（register 监听可立即就绪）
             scheduler.execute(session::start);
